@@ -172,14 +172,14 @@ public class ItemGuardListener implements Listener {
         ItemMeta meta = item.getItemMeta();
 
         if (checkOversizedDisplayName) {
-            if (meta.hasDisplayName() && meta.getDisplayName().length() > maxDisplayNameLength) {
+            if (meta != null && meta.hasDisplayName() && meta.getDisplayName().length() > maxDisplayNameLength) {
                 module.flag(player, "Exploit: Oversized DisplayName", 5.0);
                 return false;
             }
         }
 
         if (checkIllegalEnchantLevel) {
-            if (meta.hasEnchants()) {
+            if (meta != null && meta.hasEnchants()) {
                 for (Map.Entry<Enchantment, Integer> entry : meta.getEnchants().entrySet()) {
                     if (entry.getValue() > maxEnchantLevel || entry.getValue() < 0) {
                         module.flag(player, "Exploit: Illegal Enchantment Level", 5.0);

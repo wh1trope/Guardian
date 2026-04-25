@@ -23,11 +23,8 @@ import io.netty.util.ReferenceCountUtil;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.violation.ViolationLog;
 import me.whitrope.guardian.violation.ViolationUser;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.UUID;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.net.InetSocketAddress;

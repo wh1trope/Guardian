@@ -74,8 +74,8 @@ public class ModuleManager {
 
     public boolean handleIncomingPacket(Object packet, Player player, Channel channel) {
         GuardianModule[] arr = enabledIncoming;
-        for (int i = 0; i < arr.length; i++) {
-            if (!arr[i].onPacketReceive(packet, player, channel)) {
+        for (GuardianModule guardianModule : arr) {
+            if (!guardianModule.onPacketReceive(packet, player, channel)) {
                 return false;
             }
         }
@@ -84,9 +84,8 @@ public class ModuleManager {
 
     public boolean handleOutgoingPacket(Object packet, Player player) {
         GuardianModule[] arr = enabledOutgoing;
-        if (arr.length == 0) return true;
-        for (int i = 0; i < arr.length; i++) {
-            if (!((OutgoingPacketProcessor) arr[i]).onPacketSend(packet, player)) {
+        for (GuardianModule guardianModule : arr) {
+            if (!((OutgoingPacketProcessor) guardianModule).onPacketSend(packet, player)) {
                 return false;
             }
         }

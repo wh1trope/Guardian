@@ -22,6 +22,7 @@ import com.google.common.cache.CacheBuilder;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.config.ConfigManager;
 import me.whitrope.guardian.module.GuardianModule;
+import me.whitrope.guardian.util.ChatUtil;
 import me.whitrope.guardian.violation.ViolationLog;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
@@ -127,7 +128,7 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
             Long lastJoinObj = lastConnectionTimes.getIfPresent(ip);
             long lastJoin = lastJoinObj != null ? lastJoinObj : 0L;
             if (now - lastJoin < minDelayBetweenJoins) {
-                deny(event, "§bConnection throttled! Please wait before joining again.");
+                deny(event, ChatUtil.fix("&cConnection throttled! Please wait before joining again."));
                 return;
             }
         }
@@ -141,7 +142,7 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
             }
 
             if (window.count.incrementAndGet() > maxPreLoginsPerSecond) {
-                deny(event, "§cToo many connections from your address.");
+                deny(event, ChatUtil.fix("&cToo many connections from your address."));
                 return;
             }
         }
@@ -151,15 +152,15 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
         if (checkUsernameLength) {
             int len = name.length();
             if (len < minUsernameLength || len > maxUsernameLength) {
-                deny(event, "§cInvalid username length! Allowed: "
-                        + minUsernameLength + "–" + maxUsernameLength + " characters.");
+                deny(event, ChatUtil.fix("&cInvalid username length! Allowed: "
+                        + minUsernameLength + "–" + maxUsernameLength + " characters."));
                 return;
             }
         }
 
         if (checkUsernameCharacters) {
             if (!allowedUsernamePattern.matcher(name).matches()) {
-                deny(event, "§cYour username contains illegal characters!");
+                deny(event, ChatUtil.fix("&cYour username contains illegal characters!"));
                 return;
             }
         }
@@ -167,7 +168,7 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
         if (checkUsernameBlacklist) {
             for (Pattern pattern : blacklistedPatterns) {
                 if (pattern.matcher(name).matches()) {
-                    deny(event, "§cYour username is not permitted on this server!");
+                    deny(event, ChatUtil.fix("&cYour username is not permitted on this server!"));
                     return;
                 }
             }
@@ -176,10 +177,10 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
 
     private void deny(AsyncPlayerPreLoginEvent event, String reason) {
         getPlugin().getViolationManager().addLog(new ViolationLog(
-                event.getName(), "ConnectionGuard", "IP: " + event.getAddress().getHostAddress() + " | " + reason.replace("§c", "").replace("§b", ""), false));
+                event.getName(), "ConnectionGuard", "IP: " + event.getAddress().getHostAddress() + " | " + reason.replace("&c", "").replace("&b", ""), false));
         event.disallow(
                 AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                reason + "\n§bGuardian"
+                ChatUtil.fix("&8&l<< &b&lGuardian &8&l>> \n\n" + reason)
         );
     }
 

@@ -59,7 +59,7 @@ public class PunishmentService {
             if (crashBack) {
                 crashClient(player);
             } else {
-                String kickMsg = ChatUtil.fix("§8§l<< §b§lGuardian §8§l>>\n \n" + kickReason);
+                String kickMsg = ChatUtil.fix("&8&l<< &b&lGuardian &8&l>>\n \n" + kickReason);
                 player.kickPlayer(kickMsg);
             }
         }, 5L);
@@ -87,7 +87,7 @@ public class PunishmentService {
         if (plugin.getConfigManager().getConfig().getBoolean("settings.temp-ban.enabled", false)) {
             int duration = plugin.getConfigManager().getConfig().getInt("settings.temp-ban.duration-minutes", 5);
             Date expires = new Date(System.currentTimeMillis() + (duration * 60000L));
-            String banReason = ChatUtil.fix("\n\n§8§l<< §b§lGuardian §8§l>>\n \n§cBlocked by security system.\n§7Tempbanned for §f" + duration + " §7minutes.\n");
+            String banReason = ChatUtil.fix("\n\n&8&l<< &b&lGuardian &8&l>>\n \n&cBlocked by security system.\n&7Tempbanned for &f" + duration + " &7minutes.\n");
             player.banIp(banReason, expires, "Guardian", true);
         }
     }
