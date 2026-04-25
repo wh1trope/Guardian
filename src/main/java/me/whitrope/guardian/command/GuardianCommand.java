@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Main command handler for the /guardian command, including subcommands and GUI access.
- */
 package me.whitrope.guardian.command;
 
 import me.whitrope.guardian.Guardian;
@@ -37,6 +34,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Main command handler for the /guardian command, including subcommands and GUI access.
+ */
 public class GuardianCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUBCOMMANDS = Arrays.asList(
@@ -83,6 +83,7 @@ public class GuardianCommand implements CommandExecutor, TabCompleter {
                 boolean current = plugin.getConfigManager().isDebugMode();
                 plugin.getConfigManager().getConfig().set("settings.debug-mode", !current);
                 plugin.getConfigManager().save();
+                plugin.getConfigManager().reload();
                 ChatUtil.sendMessage(sender, "&7Debug mode is now&8: " + (!current ? "&aENABLED" : "&cDISABLED"));
                 break;
             case "status":

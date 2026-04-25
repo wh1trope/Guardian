@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Module for monitoring player activity and preventing automated exploits.
- */
 package me.whitrope.guardian.module.impl;
 
 import me.whitrope.guardian.Guardian;
@@ -29,6 +26,9 @@ import me.whitrope.guardian.processor.impl.RateLimitProcessor;
 import me.whitrope.guardian.processor.impl.SignUpdateProcessor;
 import me.whitrope.guardian.processor.impl.WindowClickProcessor;
 
+/**
+ * Module for monitoring player activity and preventing automated exploits.
+ */
 public class ActivityGuardModule extends GuardianModule {
 
     public ActivityGuardModule(Guardian plugin) {

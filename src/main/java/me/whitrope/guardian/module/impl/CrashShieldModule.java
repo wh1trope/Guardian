@@ -15,15 +15,15 @@
  */
 
 
-/**
- * General protection module against various server crash techniques.
- */
 package me.whitrope.guardian.module.impl;
 
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.impl.*;
 
+/**
+ * General protection module against various server crash techniques.
+ */
 public class CrashShieldModule extends GuardianModule {
 
     public CrashShieldModule(Guardian plugin) {
@@ -33,7 +33,29 @@ public class CrashShieldModule extends GuardianModule {
     @Override
     protected void onEnable() {
         if (getConfigManager().isCheckEnabled("CrashShield", "string-exploit")) {
-            addGlobalProcessor(new StringExploitProcessor(this));
+            StringExploitProcessor stringProcessor = new StringExploitProcessor(this);
+            addSpecificProcessor("ServerboundChatPacket", stringProcessor);
+            addSpecificProcessor("ServerboundChatCommandPacket", stringProcessor);
+            addSpecificProcessor("ServerboundChatCommandSignedPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInChat", stringProcessor);
+            addSpecificProcessor("ServerboundCustomPayloadPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInCustomPayload", stringProcessor);
+            addSpecificProcessor("ServerboundSignUpdatePacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInUpdateSign", stringProcessor);
+            addSpecificProcessor("ServerboundEditBookPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInBEdit", stringProcessor);
+            addSpecificProcessor("ServerboundCommandSuggestionPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInTabComplete", stringProcessor);
+            addSpecificProcessor("ServerboundRenameItemPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInItemName", stringProcessor);
+            addSpecificProcessor("ServerboundResourcePackPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInResourcePackStatus", stringProcessor);
+            addSpecificProcessor("ServerboundSetJigsawBlockPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInSetJigsaw", stringProcessor);
+            addSpecificProcessor("ServerboundSetCommandBlockPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInSetCommandBlock", stringProcessor);
+            addSpecificProcessor("ServerboundSetStructureBlockPacket", stringProcessor);
+            addSpecificProcessor("PacketPlayInStruct", stringProcessor);
         }
 
         if (getConfigManager().isCheckEnabled("CrashShield", "payload-exploit")) {

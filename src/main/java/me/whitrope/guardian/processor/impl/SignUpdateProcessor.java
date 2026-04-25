@@ -14,22 +14,23 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Validates sign update packets to prevent text-based exploits or crashes.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
 import io.netty.util.AttributeKey;
 import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.PacketProcessor;
+import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Validates sign update packets to prevent text-based exploits or crashes.
+ */
 public class SignUpdateProcessor implements PacketProcessor {
 
     private static final AttributeKey<Data> KEY = AttributeKey.valueOf("guardian_sign_update");
@@ -54,11 +55,7 @@ public class SignUpdateProcessor implements PacketProcessor {
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
         try {
-            Data data = channel.attr(KEY).get();
-            if (data == null) {
-                data = new Data();
-                channel.attr(KEY).set(data);
-            }
+            Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
             long now = System.currentTimeMillis();
             if (now - data.windowStart >= 1000L) {
                 data.windowStart = now;
@@ -70,7 +67,9 @@ public class SignUpdateProcessor implements PacketProcessor {
             }
 
             for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                Object val = f.get(packet);
+                MethodHandle mh = ReflectionUtil.getGetter(f);
+                if (mh == null) continue;
+                Object val = mh.invoke(packet);
                 if (val instanceof String[] arr) {
                     if (arr.length > 4) {
                         module.flag(player, "Exploit: Sign has " + arr.length + " lines", 10.0);
@@ -83,7 +82,7 @@ public class SignUpdateProcessor implements PacketProcessor {
                     if (!checkLine(s, player)) return false;
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;

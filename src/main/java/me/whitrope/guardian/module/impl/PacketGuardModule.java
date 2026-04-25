@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Provides low-level packet filtering and validation.
- */
 package me.whitrope.guardian.module.impl;
 
 import io.netty.util.AttributeKey;
@@ -28,6 +25,9 @@ import me.whitrope.guardian.util.AttributeUtil;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Provides low-level packet filtering and validation.
+ */
 public class PacketGuardModule extends GuardianModule {
 
     private static final int BUCKETS = 10;
@@ -109,15 +109,15 @@ public class PacketGuardModule extends GuardianModule {
         private final int[] animationBuckets = new int[BUCKETS];
         private final long[] bucketTimes = new long[BUCKETS];
 
-        synchronized int addAndSumGlobal(long now) {
+        int addAndSumGlobal(long now) {
             return addAndSum(globalBuckets, now);
         }
 
-        synchronized int addAndSumFlying(long now) {
+        int addAndSumFlying(long now) {
             return addAndSum(flyingBuckets, now);
         }
 
-        synchronized int addAndSumAnimation(long now) {
+        int addAndSumAnimation(long now) {
             return addAndSum(animationBuckets, now);
         }
 

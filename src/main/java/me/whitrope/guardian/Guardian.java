@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Main plugin class responsible for initializing configuration, managers, modules, and listeners.
- */
 package me.whitrope.guardian;
 
 import me.whitrope.guardian.command.GuardianCommand;
@@ -27,6 +23,7 @@ import me.whitrope.guardian.module.ModuleManager;
 import me.whitrope.guardian.network.PacketInjector;
 import me.whitrope.guardian.nms.NMSManager;
 import me.whitrope.guardian.nms.NMSProvider;
+import me.whitrope.guardian.processor.impl.NbtExploitProcessor;
 import me.whitrope.guardian.util.ReflectionUtil;
 import me.whitrope.guardian.violation.PunishmentService;
 import me.whitrope.guardian.violation.ViolationManager;
@@ -36,6 +33,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Objects;
 
+/**
+ * Main plugin class responsible for initializing configuration, managers, modules, and listeners.
+ */
 public final class Guardian extends JavaPlugin {
 
     private ConfigManager configManager;
@@ -74,6 +74,7 @@ public final class Guardian extends JavaPlugin {
             packetInjector.eject(player);
         }
         ReflectionUtil.clearCache();
+        NbtExploitProcessor.clearStaticCaches();
         getLogger().info("Guardian Disabled!");
     }
 

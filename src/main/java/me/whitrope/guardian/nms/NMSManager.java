@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Utility for detecting server version and providing the appropriate NMS adapter.
- */
 package me.whitrope.guardian.nms;
 
 import me.whitrope.guardian.Guardian;
@@ -25,6 +22,9 @@ import me.whitrope.guardian.nms.versions.NmsAdapter_Fallback;
 import me.whitrope.guardian.nms.versions.NmsAdapter_Modern;
 import org.bukkit.Bukkit;
 
+/**
+ * Utility for detecting the server version and providing the appropriate NMS adapter.
+ */
 public class NMSManager {
 
     public static NMSProvider resolveAdapter(Guardian plugin) {

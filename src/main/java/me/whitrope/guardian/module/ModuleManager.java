@@ -15,19 +15,20 @@
  */
 
 
-/**
- * Manages the lifecycle and registration of all protection modules.
- */
 package me.whitrope.guardian.module;
 
 import io.netty.channel.Channel;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.module.impl.*;
+import me.whitrope.guardian.processor.OutgoingPacketProcessor;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Manages the lifecycle and registration of all protection modules.
+ */
 public class ModuleManager {
 
     private static final GuardianModule[] EMPTY = new GuardianModule[0];
@@ -85,7 +86,7 @@ public class ModuleManager {
         GuardianModule[] arr = enabledOutgoing;
         if (arr.length == 0) return true;
         for (int i = 0; i < arr.length; i++) {
-            if (!arr[i].onPacketSend(packet, player)) {
+            if (!((OutgoingPacketProcessor) arr[i]).onPacketSend(packet, player)) {
                 return false;
             }
         }

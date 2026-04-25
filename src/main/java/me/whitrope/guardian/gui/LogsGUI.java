@@ -15,9 +15,6 @@
  */
 
 
-/**
- * GUI for viewing violation logs and player history.
- */
 package me.whitrope.guardian.gui;
 
 import me.whitrope.guardian.Guardian;
@@ -25,7 +22,6 @@ import me.whitrope.guardian.util.ChatUtil;
 import me.whitrope.guardian.violation.ViolationLog;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -42,6 +38,9 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * GUI for viewing violation logs and player history.
+ */
 public class LogsGUI implements Listener {
 
     private static final int PAGE_SIZE = 45;
@@ -96,9 +95,9 @@ public class LogsGUI implements Listener {
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = item.getItemMeta();
         if (meta instanceof SkullMeta skull) {
-            @SuppressWarnings("deprecation")
-            OfflinePlayer target = Bukkit.getOfflinePlayer(log.getPlayerName());
-            skull.setOwningPlayer(target);
+            if (log.getPlayerUUID() != null) {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(log.getPlayerUUID()));
+            }
             skull.setDisplayName(ChatUtil.fix("&b&l" + log.getPlayerName()));
             List<String> lore = new ArrayList<>();
             lore.add("");

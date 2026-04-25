@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Manages the tracking and storage of player violations.
- */
 package me.whitrope.guardian.violation;
 
 import me.whitrope.guardian.Guardian;
@@ -25,13 +21,12 @@ import me.whitrope.guardian.util.ChatUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 
+/**
+ * Manages the tracking and storage of player violations.
+ */
 public class ViolationManager {
 
     private static final int HISTORY_LIMIT = 50;
@@ -39,7 +34,8 @@ public class ViolationManager {
 
     private final Map<UUID, ViolationUser> activeUsers = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastAlertTime = new ConcurrentHashMap<>();
-    private final ConcurrentLinkedDeque<ViolationLog> violationHistory = new ConcurrentLinkedDeque<>();
+    private final ArrayDeque<ViolationLog> violationHistory = new ArrayDeque<>();
+    private final Object historyLock = new Object();
     private final Guardian plugin;
 
     public ViolationManager(Guardian plugin) {
@@ -56,23 +52,10 @@ public class ViolationManager {
     }
 
     public ViolationUser getUser(Player player) {
-        ViolationUser user = activeUsers.get(player.getUniqueId());
-        if (user != null && user.getOwner() == player) {
-            return user;
-        }
-
-        if (user != null && user.getOwner() != player) {
-            if (player.isOnline()) {
-                user = new ViolationUser(player);
-                activeUsers.put(player.getUniqueId(), user);
-                return user;
-            } else {
-                return new ViolationUser(player);
-            }
-        }
-        user = new ViolationUser(player);
-        activeUsers.put(player.getUniqueId(), user);
-        return user;
+        return activeUsers.compute(player.getUniqueId(), (uuid, existing) -> {
+            if (existing != null && existing.getOwner() == player) return existing;
+            return new ViolationUser(player);
+        });
     }
 
     public void removeUser(Player player) {
@@ -84,14 +67,18 @@ public class ViolationManager {
     }
 
     public void addLog(ViolationLog log) {
-        violationHistory.addFirst(log);
-        while (violationHistory.size() > HISTORY_LIMIT) {
-            violationHistory.pollLast();
+        synchronized (historyLock) {
+            violationHistory.addFirst(log);
+            while (violationHistory.size() > HISTORY_LIMIT) {
+                violationHistory.pollLast();
+            }
         }
     }
 
     public List<ViolationLog> getHistory() {
-        return new ArrayList<>(violationHistory);
+        synchronized (historyLock) {
+            return new ArrayList<>(violationHistory);
+        }
     }
 
     public void handleViolation(Player player, String moduleName, String detail, double vlToAdd) {
@@ -132,7 +119,7 @@ public class ViolationManager {
                 crashBack = true;
             }
 
-            addLog(new ViolationLog(player.getName(), moduleName, detail, crashBack));
+            addLog(new ViolationLog(player.getName(), player.getUniqueId(), moduleName, detail, crashBack));
             if (plugin.getConfigManager().isLogExploits()) {
                 String logTag = crashBack ? "(CRASH)" : "[KICK]";
                 plugin.getLogger().info(logTag + " " + player.getName() + " - " + moduleName + " (" + detail + ")");
@@ -151,19 +138,15 @@ public class ViolationManager {
     private void startDecayTask() {
         Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
             long now = System.currentTimeMillis();
-            activeUsers.values().removeIf(user -> {
-                Player owner = user.getOwner();
-                if (owner == null || !owner.isOnline()) {
-                    return true;
-                }
+            for (ViolationUser user : activeUsers.values()) {
                 if (now - user.getLastViolationTime() > 5000L) {
-
-                    for (String module : user.getAllViolations().keySet().toArray(new String[0])) {
-                        user.reduceVl(module, 1.0);
+                    for (Map.Entry<String, Double> entry : user.getAllViolations().entrySet()) {
+                        if (entry.getValue() > 0) {
+                            user.reduceVl(entry.getKey(), 1.0);
+                        }
                     }
                 }
-                return false;
-            });
+            }
         }, 20L, 20L);
     }
 }

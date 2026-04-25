@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Validates creative mode slot interactions to prevent item-based exploits.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
@@ -28,8 +25,12 @@ import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 
+/**
+ * Validates creative mode slot interactions to prevent item-based exploits.
+ */
 public class CreativeSlotProcessor implements PacketProcessor {
 
     private final GuardianModule module;
@@ -55,7 +56,9 @@ public class CreativeSlotProcessor implements PacketProcessor {
             }
 
             for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                Object val = f.get(packet);
+                MethodHandle mh = ReflectionUtil.getGetter(f);
+                if (mh == null) continue;
+                Object val = mh.invoke(packet);
                 if (val == null) continue;
 
                 if (val instanceof Integer || val instanceof Short) {
@@ -75,7 +78,7 @@ public class CreativeSlotProcessor implements PacketProcessor {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;

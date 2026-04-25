@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Monitors server performance and mitigates packet-induced lag.
- */
 package me.whitrope.guardian.module.impl;
 
 import me.whitrope.guardian.Guardian;
@@ -31,6 +28,9 @@ import org.bukkit.event.block.BlockPistonExtendEvent;
 import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 
+/**
+ * Monitors server performance and mitigates packet-induced lag.
+ */
 public class LagControlModule extends GuardianModule implements Listener {
 
     private int redstoneCount;

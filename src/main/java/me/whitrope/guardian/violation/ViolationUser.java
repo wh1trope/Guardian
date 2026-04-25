@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Data object representing a player's violation history and current status.
- */
 package me.whitrope.guardian.violation;
 
 import org.bukkit.entity.Player;
@@ -25,6 +21,9 @@ import org.bukkit.entity.Player;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Data object representing a player's violation history and current status.
+ */
 public class ViolationUser {
     private final Player owner;
     private final Map<String, Double> violations = new ConcurrentHashMap<>();

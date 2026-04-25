@@ -15,14 +15,14 @@
  */
 
 
-/**
- * Interface defining version-specific NMS operations required by the plugin.
- */
 package me.whitrope.guardian.nms;
 
 import io.netty.channel.Channel;
 import org.bukkit.entity.Player;
 
+/**
+ * Interface defining version-specific NMS operations required by the plugin.
+ */
 public interface NMSProvider {
 
     Channel getChannel(Player player);

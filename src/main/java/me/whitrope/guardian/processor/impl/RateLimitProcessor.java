@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Enforces rate limits on various packet types to prevent spam.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
@@ -27,6 +23,9 @@ import me.whitrope.guardian.processor.PacketProcessor;
 import me.whitrope.guardian.util.AttributeUtil;
 import org.bukkit.entity.Player;
 
+/**
+ * Enforces rate limits on various packet types to prevent spam.
+ */
 public class RateLimitProcessor implements PacketProcessor {
 
     private final GuardianModule module;

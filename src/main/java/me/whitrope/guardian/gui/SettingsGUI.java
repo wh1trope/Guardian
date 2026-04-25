@@ -15,9 +15,6 @@
  */
 
 
-/**
- * GUI for managing plugin settings and module status in real-time.
- */
 package me.whitrope.guardian.gui;
 
 import me.whitrope.guardian.Guardian;
@@ -38,6 +35,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.*;
 
+/**
+ * GUI for managing plugin settings and module status in real-time.
+ */
 public class SettingsGUI implements Listener {
 
     private static final int PAGE_SIZE = 45;

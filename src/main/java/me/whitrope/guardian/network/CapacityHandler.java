@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Manages network capacity and prevents packet flooding at the network layer.
- */
 package me.whitrope.guardian.network;
 
 import io.netty.buffer.ByteBuf;
@@ -27,12 +23,19 @@ import io.netty.util.ReferenceCountUtil;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.violation.ViolationLog;
 import me.whitrope.guardian.violation.ViolationUser;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+import java.util.UUID;
+
+/**
+ * Manages network capacity and prevents packet flooding at the network layer.
+ */
 public class CapacityHandler extends ChannelInboundHandlerAdapter {
 
     private final Guardian plugin;
-    private final Player player;
+    private final UUID playerUUID;
+    private final String playerName;
     private final int maxCapacity;
     private final int maxBandwidth;
     private long lastBandwidthReset;
@@ -40,14 +43,20 @@ public class CapacityHandler extends ChannelInboundHandlerAdapter {
 
     public CapacityHandler(Guardian plugin, Player player) {
         this.plugin = plugin;
-        this.player = player;
+        this.playerUUID = player.getUniqueId();
+        this.playerName = player.getName();
         this.maxCapacity = plugin.getConfigManager().getLimitConfig("packet-guard.max-capacity", 32768);
         this.maxBandwidth = plugin.getConfigManager().getLimitConfig("packet-guard.max-bandwidth", 1048576);
         this.lastBandwidthReset = System.currentTimeMillis();
     }
 
+    private Player getPlayer() {
+        return Bukkit.getPlayer(playerUUID);
+    }
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        Player player = getPlayer();
         if (player == null) {
             super.channelRead(ctx, msg);
             return;
@@ -65,55 +74,51 @@ public class CapacityHandler extends ChannelInboundHandlerAdapter {
         }
 
         if (msg instanceof ByteBuf buf) {
+            int capacity = buf.capacity();
+            int readableBytes = buf.readableBytes();
 
-            boolean passThrough = false;
-            try {
-                int capacity = buf.capacity();
-                int readableBytes = buf.readableBytes();
+            if (!buf.isReadable() || capacity == 0) {
+                buf.release();
+                return;
+            }
 
-                if (capacity < 0 || readableBytes < 0 || (readableBytes == 0 && !buf.isReadable()) || buf.getClass().getSimpleName().contains("EmptyByteBuf")) {
-                    return;
-                }
-
+            currentBandwidth += readableBytes;
+            if (maxBandwidth > 0 && currentBandwidth > maxBandwidth) {
                 long now = System.currentTimeMillis();
                 if (now - lastBandwidthReset >= 1000L) {
                     lastBandwidthReset = now;
-                    currentBandwidth = 0;
-                }
-
-                if (maxBandwidth > 0) {
-                    currentBandwidth += readableBytes;
-                    if (currentBandwidth > maxBandwidth) {
-                        if (plugin.getConfigManager().isDebugMode()) {
-                            plugin.getLogger().warning("Dropped raw packet from " + player.getName() + " due to exceeding bandwidth limit: " + currentBandwidth + " bytes");
-                        }
-
-                        boolean isCrash = plugin.getConfigManager().isCrashBack();
-                        plugin.getViolationManager().addLog(new ViolationLog(player.getName(), "PacketGuard", "Bandwidth limit exceeded: " + currentBandwidth + " bytes", isCrash));
-                        plugin.getPunishmentService().punish(player, "&cConnection lost (Bandwidth limit exceeded)");
-                        return;
-                    }
-                }
-
-                if (maxCapacity > 0 && capacity > maxCapacity) {
+                    currentBandwidth = readableBytes;
+                } else {
                     if (plugin.getConfigManager().isDebugMode()) {
-                        plugin.getLogger().warning("Dropped raw packet from " + player.getName() + " due to exceeding capacity: " + capacity + " > " + maxCapacity);
+                        plugin.getLogger().warning("Dropped raw packet from " + playerName + " due to exceeding bandwidth limit: " + currentBandwidth + " bytes");
                     }
-
                     boolean isCrash = plugin.getConfigManager().isCrashBack();
-                    plugin.getViolationManager().addLog(new ViolationLog(player.getName(), "PacketGuard", "Reached capacity limit: " + capacity + " > " + maxCapacity, isCrash));
-                    plugin.getPunishmentService().punish(player, "&cConnection lost (Reached capacity limit)");
+                    plugin.getViolationManager().addLog(new ViolationLog(playerName, "PacketGuard", "Bandwidth limit exceeded: " + currentBandwidth + " bytes", isCrash));
+                    plugin.getPunishmentService().punish(player, "&cConnection lost (Bandwidth limit exceeded)");
+                    buf.release();
                     return;
                 }
-
-                passThrough = true;
-            } finally {
-                if (passThrough) {
-                    super.channelRead(ctx, msg);
-                } else {
-                    buf.release();
+            } else if (maxBandwidth > 0 && currentBandwidth > (maxBandwidth / 2) && currentBandwidth % 1024 == 0) {
+                long now = System.currentTimeMillis();
+                if (now - lastBandwidthReset >= 1000L) {
+                    lastBandwidthReset = now;
+                    currentBandwidth = readableBytes;
                 }
             }
+
+            if (maxCapacity > 0 && capacity > maxCapacity) {
+                if (plugin.getConfigManager().isDebugMode()) {
+                    plugin.getLogger().warning("Dropped raw packet from " + playerName + " due to exceeding capacity: " + capacity + " > " + maxCapacity);
+                }
+
+                boolean isCrash = plugin.getConfigManager().isCrashBack();
+                plugin.getViolationManager().addLog(new ViolationLog(playerName, "PacketGuard", "Reached capacity limit: " + capacity + " > " + maxCapacity, isCrash));
+                plugin.getPunishmentService().punish(player, "&cConnection lost (Reached capacity limit)");
+                buf.release();
+                return;
+            }
+
+            super.channelRead(ctx, msg);
             return;
         }
 

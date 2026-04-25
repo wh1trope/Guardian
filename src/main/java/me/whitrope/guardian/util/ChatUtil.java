@@ -14,14 +14,13 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Utility class for message formatting and color handling.
- */
 package me.whitrope.guardian.util;
 
 import org.bukkit.command.CommandSender;
 
+/**
+ * Utility class for message formatting and color handling.
+ */
 public final class ChatUtil {
 
     private ChatUtil() {

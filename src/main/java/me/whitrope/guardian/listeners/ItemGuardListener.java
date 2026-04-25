@@ -15,14 +15,12 @@
  */
 
 
-/**
- * Listener for preventing item-related exploits and malicious item interaction.
- */
 package me.whitrope.guardian.listeners;
 
 import me.whitrope.guardian.config.ConfigManager;
 import me.whitrope.guardian.module.GuardianModule;
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.block.Beehive;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
@@ -40,13 +38,27 @@ import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.EnumSet;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
 
+/**
+ * Listener for preventing item-related exploits and malicious item interaction.
+ */
 public class ItemGuardListener implements Listener {
 
-    private final GuardianModule module;
+    private static final Set<Material> SKULLS = EnumSet.noneOf(Material.class);
 
+    static {
+        for (Material mat : Material.values()) {
+            String name = mat.name();
+            if (name.endsWith("_SKULL") || name.endsWith("_HEAD")) {
+                SKULLS.add(mat);
+            }
+        }
+    }
+
+    private final GuardianModule module;
     private boolean checkInvalidStackSize;
     private boolean checkOversizedDisplayName;
     private boolean checkIllegalEnchantLevel;
@@ -59,7 +71,6 @@ public class ItemGuardListener implements Listener {
     private boolean checkBlockMaps;
     private boolean checkBlockArmorstands;
     private boolean checkBlockLecterns;
-
     private int maxDisplayNameLength;
     private int maxEnchantLevel;
     private int maxBookPages;
@@ -161,14 +172,14 @@ public class ItemGuardListener implements Listener {
         ItemMeta meta = item.getItemMeta();
 
         if (checkOversizedDisplayName) {
-            if (Objects.requireNonNull(meta).hasDisplayName() && meta.getDisplayName().length() > maxDisplayNameLength) {
+            if (meta.hasDisplayName() && meta.getDisplayName().length() > maxDisplayNameLength) {
                 module.flag(player, "Exploit: Oversized DisplayName", 5.0);
                 return false;
             }
         }
 
         if (checkIllegalEnchantLevel) {
-            if (Objects.requireNonNull(meta).hasEnchants()) {
+            if (meta.hasEnchants()) {
                 for (Map.Entry<Enchantment, Integer> entry : meta.getEnchants().entrySet()) {
                     if (entry.getValue() > maxEnchantLevel || entry.getValue() < 0) {
                         module.flag(player, "Exploit: Illegal Enchantment Level", 5.0);
@@ -256,12 +267,11 @@ public class ItemGuardListener implements Listener {
     }
 
     private boolean isSkull(Material mat) {
-        String name = mat.name();
-        return name.endsWith("_SKULL") || name.endsWith("_HEAD");
+        return SKULLS.contains(mat);
     }
 
     private boolean isShulkerBox(Material mat) {
-        return mat.name().endsWith("SHULKER_BOX");
+        return Tag.SHULKER_BOXES.isTagged(mat);
     }
 
     private boolean isBeehive(Material mat) {

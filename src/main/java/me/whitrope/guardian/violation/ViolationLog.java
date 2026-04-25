@@ -14,30 +14,41 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
+package me.whitrope.guardian.violation;
+
+import java.util.UUID;
 
 /**
  * Represents a single recorded violation event.
  */
-package me.whitrope.guardian.violation;
-
 public class ViolationLog {
 
     private final String playerName;
+    private final UUID playerUUID;
     private final String moduleName;
     private final String detail;
     private final boolean isCrash;
     private final long timestamp;
 
-    public ViolationLog(String playerName, String moduleName, String detail, boolean isCrash) {
+    public ViolationLog(String playerName, UUID playerUUID, String moduleName, String detail, boolean isCrash) {
         this.playerName = playerName;
+        this.playerUUID = playerUUID;
         this.moduleName = moduleName;
         this.detail = detail;
         this.isCrash = isCrash;
         this.timestamp = System.currentTimeMillis();
     }
 
+    public ViolationLog(String playerName, String moduleName, String detail, boolean isCrash) {
+        this(playerName, null, moduleName, detail, isCrash);
+    }
+
     public String getPlayerName() {
         return playerName;
+    }
+
+    public UUID getPlayerUUID() {
+        return playerUUID;
     }
 
     public String getModuleName() {

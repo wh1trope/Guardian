@@ -15,11 +15,10 @@
  */
 
 
-/**
- * Module for protecting against connection-based attacks and botting.
- */
 package me.whitrope.guardian.module.impl;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.config.ConfigManager;
 import me.whitrope.guardian.module.GuardianModule;
@@ -32,18 +31,23 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+/**
+ * Module for protecting against connection-based attacks and botting.
+ */
 public class ConnectionGuardModule extends GuardianModule implements Listener {
 
-    private final Map<String, Long> lastConnectionTimes = new ConcurrentHashMap<>();
-    private final Map<String, RateWindow> ipRateWindow = new ConcurrentHashMap<>();
-    private final List<Pattern> blacklistedPatterns = new ArrayList<>();
+    private final Cache<String, Long> lastConnectionTimes = CacheBuilder.newBuilder()
+            .expireAfterWrite(30, TimeUnit.SECONDS).build();
+    private final Cache<String, RateWindow> ipRateWindow = CacheBuilder.newBuilder()
+            .expireAfterWrite(3, TimeUnit.SECONDS).build();
+    private volatile List<Pattern> blacklistedPatterns = Collections.emptyList();
     private long minDelayBetweenJoins;
     private int maxPreLoginsPerSecond;
     private int minUsernameLength;
@@ -62,12 +66,6 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
     protected void onEnable() {
         loadConfig();
         Bukkit.getPluginManager().registerEvents(this, getPlugin());
-
-        Bukkit.getScheduler().runTaskTimerAsynchronously(getPlugin(), () -> {
-            long now = System.currentTimeMillis();
-            lastConnectionTimes.entrySet().removeIf(entry -> now - entry.getValue() > 30000L);
-            ipRateWindow.entrySet().removeIf(entry -> now - entry.getValue().startTime > 3000L);
-        }, 200L, 200L);
     }
 
     @Override
@@ -105,17 +103,18 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
             allowedUsernamePattern = Pattern.compile("^[a-zA-Z0-9_]+$");
         }
 
-        blacklistedPatterns.clear();
+        List<Pattern> newPatterns = new ArrayList<>();
         List<String> rawPatterns = cfg.getConfig().getStringList(
                 "limits.connection-guard.username.blacklisted-patterns");
         for (String raw : rawPatterns) {
             try {
-                blacklistedPatterns.add(Pattern.compile(raw, Pattern.CASE_INSENSITIVE));
+                newPatterns.add(Pattern.compile(raw, Pattern.CASE_INSENSITIVE));
             } catch (PatternSyntaxException e) {
                 getPlugin().getLogger().warning("[ConnectionGuard] Invalid blacklist pattern '"
                         + raw + "', skipping.");
             }
         }
+        this.blacklistedPatterns = Collections.unmodifiableList(newPatterns);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -125,7 +124,8 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
         long now = System.currentTimeMillis();
 
         if (checkJoinRateLimit && minDelayBetweenJoins > 0) {
-            long lastJoin = lastConnectionTimes.getOrDefault(ip, 0L);
+            Long lastJoinObj = lastConnectionTimes.getIfPresent(ip);
+            long lastJoin = lastJoinObj != null ? lastJoinObj : 0L;
             if (now - lastJoin < minDelayBetweenJoins) {
                 deny(event, "§bConnection throttled! Please wait before joining again.");
                 return;
@@ -133,7 +133,7 @@ public class ConnectionGuardModule extends GuardianModule implements Listener {
         }
 
         if (checkJoinRateLimit && maxPreLoginsPerSecond > 0) {
-            RateWindow window = ipRateWindow.computeIfAbsent(ip, k -> new RateWindow(now));
+            RateWindow window = ipRateWindow.asMap().computeIfAbsent(ip, k -> new RateWindow(now));
 
             if (now - window.startTime >= 1000L) {
                 window.startTime = now;

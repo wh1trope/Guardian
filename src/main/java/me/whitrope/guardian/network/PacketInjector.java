@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Handles the injection of custom channel handlers into player network connections.
- */
 package me.whitrope.guardian.network;
 
 import io.netty.channel.Channel;
@@ -27,6 +24,9 @@ import org.bukkit.entity.Player;
 
 import java.util.logging.Level;
 
+/**
+ * Handles the injection of custom channel handlers into player network connections.
+ */
 public class PacketInjector {
 
     private static final String HANDLER_NAME = "guardian_anticrash";

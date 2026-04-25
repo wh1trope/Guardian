@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Validates pick-item packets to prevent item duplication or crashes.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
@@ -26,8 +23,12 @@ import me.whitrope.guardian.processor.PacketProcessor;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 
+/**
+ * Validates pick-item packets to prevent item duplication or crashes.
+ */
 public class PickItemProcessor implements PacketProcessor {
 
     private final GuardianModule module;
@@ -40,7 +41,9 @@ public class PickItemProcessor implements PacketProcessor {
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
         try {
             for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                Object val = f.get(packet);
+                MethodHandle mh = ReflectionUtil.getGetter(f);
+                if (mh == null) continue;
+                Object val = mh.invoke(packet);
                 if (val instanceof Integer slot) {
                     if (slot < 0 || slot > 45) {
                         module.flag(player, "Exploit: Invalid PickItem slot (" + slot + ")", 5.0);
@@ -53,7 +56,7 @@ public class PickItemProcessor implements PacketProcessor {
                     }
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;

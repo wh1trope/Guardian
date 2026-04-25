@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Fallback NMS implementation for unsupported or older server versions.
- */
 package me.whitrope.guardian.nms.versions;
 
 import io.netty.channel.Channel;
@@ -28,6 +25,9 @@ import org.bukkit.entity.Player;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+/**
+ * Fallback NMS implementation for unsupported or older server versions.
+ */
 public class NmsAdapter_Fallback implements NMSProvider {
     private final Guardian plugin;
 

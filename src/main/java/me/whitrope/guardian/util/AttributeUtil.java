@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Utility class for handling entity attributes and NMS conversions.
- */
 package me.whitrope.guardian.util;
 
 import io.netty.channel.Channel;
@@ -26,6 +23,9 @@ import io.netty.util.AttributeKey;
 
 import java.util.function.Supplier;
 
+/**
+ * Utility class for handling entity attributes and NMS conversions.
+ */
 public class AttributeUtil {
 
     public static <T> T getOrCreate(Channel channel, AttributeKey<T> key, Supplier<T> supplier) {

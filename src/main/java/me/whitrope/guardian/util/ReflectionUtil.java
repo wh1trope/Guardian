@@ -14,10 +14,6 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Provides reflection-based access to NMS and CraftBukkit classes.
- */
 package me.whitrope.guardian.util;
 
 import org.bukkit.Bukkit;
@@ -32,6 +28,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
+/**
+ * Provides reflection-based access to NMS and CraftBukkit classes.
+ */
 public final class ReflectionUtil {
 
     private static final Field[] EMPTY = new Field[0];

@@ -15,26 +15,28 @@
  */
 
 
-/**
- * Processes and validates book edit packets to prevent crashes.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
 import io.netty.util.AttributeKey;
 import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.PacketProcessor;
+import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Processes and validates book edit packets to prevent crashes.
+ */
 public class BookEditProcessor implements PacketProcessor {
 
     private static final AttributeKey<BookData> BOOK_DATA_KEY = AttributeKey.valueOf("guardian_book_data");
@@ -75,11 +77,7 @@ public class BookEditProcessor implements PacketProcessor {
                 }
             });
 
-            BookData data = channel.attr(BOOK_DATA_KEY).get();
-            if (data == null) {
-                data = new BookData();
-                channel.attr(BOOK_DATA_KEY).set(data);
-            }
+            BookData data = AttributeUtil.getOrCreate(channel, BOOK_DATA_KEY, BookData::new);
             long now = System.currentTimeMillis();
             if (now - data.windowStart >= 1000L) {
                 data.windowStart = now;
@@ -91,14 +89,16 @@ public class BookEditProcessor implements PacketProcessor {
             }
 
             for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                Object val = f.get(packet);
+                MethodHandle mh = ReflectionUtil.getGetter(f);
+                if (mh == null) continue;
+                Object val = mh.invoke(packet);
                 if (val instanceof List<?> list) {
                     if (!validatePages(list, player)) return false;
                 } else if (val instanceof Collection<?> col) {
                     if (!validatePages(col, player)) return false;
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
 

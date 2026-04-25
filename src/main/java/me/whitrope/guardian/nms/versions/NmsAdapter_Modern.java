@@ -15,9 +15,6 @@
  */
 
 
-/**
- * NMS implementation for modern Minecraft versions.
- */
 package me.whitrope.guardian.nms.versions;
 
 import io.netty.channel.Channel;
@@ -28,6 +25,9 @@ import org.bukkit.entity.Player;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
+/**
+ * NMS implementation for modern Minecraft versions.
+ */
 public class NmsAdapter_Modern implements NMSProvider {
     private final Guardian plugin;
 

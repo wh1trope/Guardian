@@ -15,14 +15,14 @@
  */
 
 
-/**
- * Base class for specific packet processing logic.
- */
 package me.whitrope.guardian.processor;
 
 import io.netty.channel.Channel;
 import org.bukkit.entity.Player;
 
+/**
+ * Base class for specific packet processing logic.
+ */
 public interface PacketProcessor {
 
     boolean process(Object packet, Player player, String packetName, Channel channel);

@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Custom Netty channel handler for intercepting and processing incoming packets.
- */
 package me.whitrope.guardian.network;
 
 import io.netty.channel.ChannelDuplexHandler;
@@ -31,12 +28,16 @@ import org.bukkit.entity.Player;
 
 import java.util.logging.Level;
 
+/**
+ * Custom Netty channel handler for intercepting and processing incoming packets.
+ */
 public class ChannelHandler extends ChannelDuplexHandler {
 
     private final Guardian plugin;
     private final Player player;
     private final int hardcapPacketsPerSecond;
     private final boolean hardcapEnabled;
+    private final ViolationUser cachedUser;
 
     private long lastHardcapReset = System.currentTimeMillis();
     private int packetCount = 0;
@@ -46,6 +47,7 @@ public class ChannelHandler extends ChannelDuplexHandler {
         this.player = player;
         this.hardcapPacketsPerSecond = plugin.getConfigManager().getLimitConfig("packet-guard.hardcap-pps", 500);
         this.hardcapEnabled = this.hardcapPacketsPerSecond > 0;
+        this.cachedUser = plugin.getViolationManager().getUser(player);
     }
 
     @Override
@@ -55,8 +57,7 @@ public class ChannelHandler extends ChannelDuplexHandler {
             return;
         }
 
-        ViolationUser user = plugin.getViolationManager().peekUser(player);
-        if (user != null && user.isPendingKick()) {
+        if (cachedUser != null && cachedUser.isPendingKick()) {
             ReferenceCountUtil.release(msg);
             return;
         }
@@ -70,8 +71,7 @@ public class ChannelHandler extends ChannelDuplexHandler {
 
             if (++packetCount > hardcapPacketsPerSecond) {
 
-                ViolationUser punishUser = plugin.getViolationManager().getUser(player);
-                if (!punishUser.isPendingKick()) {
+                if (cachedUser != null && !cachedUser.isPendingKick()) {
                     boolean isCrash = plugin.getConfigManager().isCrashBack();
                     plugin.getViolationManager().addLog(new ViolationLog(player.getName(), "PacketGuard", "Packet flood: " + packetCount + " pps", isCrash));
                     plugin.getPunishmentService().punish(player, "&cConnection lost (Packet flood)");

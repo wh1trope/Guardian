@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Handles player join/quit events and manages packet injection for new connections.
- */
 package me.whitrope.guardian.listeners;
 
 import me.whitrope.guardian.Guardian;
@@ -27,6 +24,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+/**
+ * Handles player join/quit events and manages packet injection for new connections.
+ */
 public class PlayerConnectionListener implements Listener {
     private final Guardian plugin;
 

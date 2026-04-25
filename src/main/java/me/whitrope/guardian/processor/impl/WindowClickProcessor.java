@@ -13,33 +13,30 @@
  * You should have received a copy of the license along with this project.
  * If not, see <http://www.gnu.org/licenses/>.
  */
+package me.whitrope.guardian.processor.impl;
 
+import io.netty.channel.Channel;
+import me.whitrope.guardian.module.GuardianModule;
+import me.whitrope.guardian.processor.PacketProcessor;
+import me.whitrope.guardian.util.RateLimiterUtil;
+import me.whitrope.guardian.util.ReflectionUtil;
+import me.whitrope.guardian.util.UnsafeUtil;
+import org.bukkit.entity.Player;
+
+import java.lang.reflect.Field;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Validates inventory click packets to prevent illegal item movements.
  */
-package me.whitrope.guardian.processor.impl;
-
-import io.netty.channel.Channel;
-import io.netty.util.AttributeKey;
-import me.whitrope.guardian.module.GuardianModule;
-import me.whitrope.guardian.processor.PacketProcessor;
-import me.whitrope.guardian.util.AttributeUtil;
-import me.whitrope.guardian.util.ReflectionUtil;
-import org.bukkit.entity.Player;
-
-import java.lang.invoke.MethodHandle;
-import java.lang.reflect.Field;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
 public class WindowClickProcessor implements PacketProcessor {
-
-    private static final AttributeKey<ClickData> CLICK_DATA_KEY = AttributeKey.valueOf("guardian_click_data");
 
     private final GuardianModule module;
     private final Map<Class<?>, PacketFieldMap> fieldCache = new ConcurrentHashMap<>();
+    private final RateLimiterUtil secondLimiter = new RateLimiterUtil(1000L);
+    private final RateLimiterUtil tickLimiter = new RateLimiterUtil(50L);
+
     private int maxClicksPerSecond;
     private int maxClicksPerTick;
     private int maxSlotValue;
@@ -60,43 +57,37 @@ public class WindowClickProcessor implements PacketProcessor {
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
         try {
-            ClickData data = AttributeUtil.getOrCreate(channel, CLICK_DATA_KEY, ClickData::new);
-
-            long now = System.currentTimeMillis();
-            if (now - data.windowStart >= 1000L) {
-                data.windowStart = now;
-                data.perSecond.set(0);
-            }
-            if (now - data.tickStart >= 50L) {
-                data.tickStart = now;
-                data.perTick.set(0);
-            }
-
-            int ps = data.perSecond.incrementAndGet();
-            int pt = data.perTick.incrementAndGet();
-            if (maxClicksPerTick > 0 && pt > maxClicksPerTick) {
-                module.flag(player, "Exploit: WindowClick burst (" + pt + "/tick)", 2.5);
+            if (maxClicksPerTick > 0 && tickLimiter.checkExceeded(player.getUniqueId(), maxClicksPerTick)) {
+                module.flag(player, "Exploit: WindowClick burst", 2.5);
                 return false;
             }
-            if (maxClicksPerSecond > 0 && ps > maxClicksPerSecond) {
-                module.flag(player, "Exploit: WindowClick flood (" + ps + "/s)", 5.0);
+            if (maxClicksPerSecond > 0 && secondLimiter.checkExceeded(player.getUniqueId(), maxClicksPerSecond)) {
+                module.flag(player, "Exploit: WindowClick flood", 5.0);
                 return false;
             }
 
             PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
 
-            Integer slotNumInt = fMap.slotField != null ? getIntOrShort(fMap.slotField, packet) : null;
-            Byte modeByte = fMap.modeByteField != null ? (Byte) fMap.modeByteField.invoke(packet) : null;
-            Byte buttonByte = fMap.buttonByteField != null ? (Byte) fMap.buttonByteField.invoke(packet) : null;
-            Integer buttonInt = fMap.buttonIntField != null ? (Integer) fMap.buttonIntField.invoke(packet) : null;
+            Integer slotNumInt = null;
+            if (fMap.slotOffset != -1) {
+                if (fMap.slotIsShort) {
+                    slotNumInt = (int) UnsafeUtil.getShort(packet, fMap.slotOffset);
+                } else {
+                    slotNumInt = UnsafeUtil.getInt(packet, fMap.slotOffset);
+                }
+            }
+
+            Byte modeByte = fMap.modeByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.modeByteOffset) : null;
+            Byte buttonByte = fMap.buttonByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.buttonByteOffset) : null;
+            Integer buttonInt = fMap.buttonIntOffset != -1 ? UnsafeUtil.getInt(packet, fMap.buttonIntOffset) : null;
 
             int clickTypeOrdinal = -1;
-            if (fMap.enumField != null) {
-                Enum<?> e = (Enum<?>) fMap.enumField.invoke(packet);
+            if (fMap.enumOffset != -1) {
+                Enum<?> e = (Enum<?>) UnsafeUtil.getObject(packet, fMap.enumOffset);
                 if (e != null) clickTypeOrdinal = e.ordinal();
             }
 
-            if (fMap.buttonIntField != null && buttonInt != null && (buttonInt < -999 || buttonInt > 999)) {
+            if (buttonInt != null && (buttonInt < -999 || buttonInt > 999)) {
                 module.flag(player, "Exploit: Invalid WindowClick int (" + buttonInt + ")", 5.0);
                 return false;
             }
@@ -135,7 +126,7 @@ public class WindowClickProcessor implements PacketProcessor {
                     return false;
                 }
             }
-        } catch (Throwable e) {
+        } catch (Exception e) {
             if (module.getConfigManager().isDebugMode()) {
                 e.printStackTrace();
             }
@@ -143,45 +134,36 @@ public class WindowClickProcessor implements PacketProcessor {
         return true;
     }
 
-    private Integer getIntOrShort(MethodHandle mh, Object packet) {
-        try {
-            Object val = mh.invoke(packet);
-            if (val instanceof Integer) return (Integer) val;
-            if (val instanceof Short) return ((Short) val).intValue();
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
     private PacketFieldMap mapFields(Class<?> clazz) {
         PacketFieldMap map = new PacketFieldMap();
         for (Field f : ReflectionUtil.getCachedFields(clazz)) {
-            MethodHandle mh = ReflectionUtil.getGetter(f);
-            if (mh == null) continue;
+            long offset = UnsafeUtil.objectFieldOffset(f);
+            if (offset == -1) continue;
 
             Class<?> type = f.getType();
-            if (type == byte.class || type == Byte.class) {
-                if (map.modeByteField == null) {
-                    map.modeByteField = mh;
-                } else if (map.buttonByteField == null) {
-                    map.buttonByteField = mh;
+            if (type == byte.class) {
+                if (map.modeByteOffset == -1) {
+                    map.modeByteOffset = offset;
+                } else if (map.buttonByteOffset == -1) {
+                    map.buttonByteOffset = offset;
                 }
             } else if (Enum.class.isAssignableFrom(type)) {
                 String enumName = type.getSimpleName();
                 if (enumName.contains("Click") || enumName.contains("Action") || enumName.contains("Mode")) {
-                    map.enumField = mh;
+                    map.enumOffset = offset;
                 }
-            } else if (type == int.class || type == Integer.class) {
+            } else if (type == int.class) {
                 String fieldName = f.getName().toLowerCase();
                 if (fieldName.contains("slot") || fieldName.contains("slotnum")) {
-                    map.slotField = mh;
+                    map.slotOffset = offset;
                 } else if (fieldName.contains("button") || fieldName.equals("d")) {
-                    map.buttonIntField = mh;
+                    map.buttonIntOffset = offset;
                 }
-            } else if (type == short.class || type == Short.class) {
+            } else if (type == short.class) {
                 String fieldName = f.getName().toLowerCase();
-                if (fieldName.contains("slot")) {
-                    map.slotField = mh;
+                if (fieldName.contains("slot") || fieldName.contains("slotnum")) {
+                    map.slotOffset = offset;
+                    map.slotIsShort = true;
                 }
             }
         }
@@ -189,17 +171,11 @@ public class WindowClickProcessor implements PacketProcessor {
     }
 
     private static class PacketFieldMap {
-        MethodHandle modeByteField;
-        MethodHandle buttonByteField;
-        MethodHandle enumField;
-        MethodHandle slotField;
-        MethodHandle buttonIntField;
-    }
-
-    private static class ClickData {
-        final AtomicInteger perSecond = new AtomicInteger(0);
-        final AtomicInteger perTick = new AtomicInteger(0);
-        volatile long windowStart = System.currentTimeMillis();
-        volatile long tickStart = System.currentTimeMillis();
+        long modeByteOffset = -1;
+        long buttonByteOffset = -1;
+        long enumOffset = -1;
+        long slotOffset = -1;
+        long buttonIntOffset = -1;
+        boolean slotIsShort = false;
     }
 }

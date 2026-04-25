@@ -15,9 +15,6 @@
  */
 
 
-/**
- * Handles the execution of punishments (kick, ban, etc.) for violations.
- */
 package me.whitrope.guardian.violation;
 
 import io.netty.channel.Channel;
@@ -29,6 +26,9 @@ import org.bukkit.entity.Player;
 
 import java.util.Date;
 
+/**
+ * Handles the execution of punishments (kick, ban, etc.) for violations.
+ */
 public class PunishmentService {
 
     private final Guardian plugin;

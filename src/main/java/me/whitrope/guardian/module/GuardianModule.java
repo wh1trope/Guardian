@@ -14,15 +14,12 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/**
- * Base class for all plugin modules, defining standard enable/disable behavior.
- */
 package me.whitrope.guardian.module;
 
 import io.netty.channel.Channel;
 import me.whitrope.guardian.Guardian;
 import me.whitrope.guardian.config.ConfigManager;
+import me.whitrope.guardian.processor.OutgoingPacketProcessor;
 import me.whitrope.guardian.processor.PacketProcessor;
 import org.bukkit.entity.Player;
 
@@ -32,6 +29,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Base class for all plugin modules, defining standard enable/disable behavior.
+ */
 public abstract class GuardianModule {
 
     private static final List<PacketProcessor> NONE = Collections.emptyList();
@@ -47,16 +47,7 @@ public abstract class GuardianModule {
     public GuardianModule(Guardian plugin, String moduleName) {
         this.plugin = plugin;
         this.moduleName = moduleName;
-        this.hasOutgoingHandler = detectOutgoingOverride();
-    }
-
-    private boolean detectOutgoingOverride() {
-        try {
-            return getClass().getMethod("onPacketSend", Object.class, Player.class)
-                    .getDeclaringClass() != GuardianModule.class;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
+        this.hasOutgoingHandler = this instanceof OutgoingPacketProcessor;
     }
 
     public void initialize() {
@@ -153,10 +144,6 @@ public abstract class GuardianModule {
                 if (!p.process(packet, player, packetName, channel)) return false;
             }
         }
-        return true;
-    }
-
-    public boolean onPacketSend(Object packet, Player player) {
         return true;
     }
 }

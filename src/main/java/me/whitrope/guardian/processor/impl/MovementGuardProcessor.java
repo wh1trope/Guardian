@@ -15,15 +15,13 @@
  */
 
 
-/**
- * Validates player movement packets to prevent movement-based exploits.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
 import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.PacketProcessor;
 import me.whitrope.guardian.util.ReflectionUtil;
+import me.whitrope.guardian.util.UnsafeUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -34,7 +32,6 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -43,15 +40,19 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Validates player movement packets to prevent movement-based exploits.
+ */
 public class MovementGuardProcessor implements PacketProcessor, Listener {
 
     private static final double WORLD_BORDER = 30_000_000.0D;
     private static final double INSANE_COORD = 1_000_000_000.0D;
+    private static final float MAX_ROTATION = 100_000.0F;
 
     private final GuardianModule module;
     private final Map<Class<?>, PacketFieldMap> fieldCache = new ConcurrentHashMap<>();
-    private final Map<Class<?>, List<Field>> blockPosFieldsMap = new ConcurrentHashMap<>();
-    private final Map<UUID, double[]> safeLocationCache = new ConcurrentHashMap<>();
+    private final Map<Class<?>, long[]> blockPosFieldsMap = new ConcurrentHashMap<>();
+    private final Map<UUID, CachedLocation> safeLocationCache = new ConcurrentHashMap<>();
     private double maxAbsoluteCoord;
     private double maxInteractDistanceSq;
     private boolean requireVehicle;
@@ -68,7 +69,7 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
     public void onPlayerMove(PlayerMoveEvent event) {
         Location to = event.getTo();
         if (to != null) {
-            safeLocationCache.put(event.getPlayer().getUniqueId(), new double[]{to.getX(), to.getY(), to.getZ()});
+            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new CachedLocation()).update(to);
         }
     }
 
@@ -76,7 +77,7 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
     public void onPlayerTeleport(PlayerTeleportEvent event) {
         Location to = event.getTo();
         if (to != null) {
-            safeLocationCache.put(event.getPlayer().getUniqueId(), new double[]{to.getX(), to.getY(), to.getZ()});
+            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new CachedLocation()).update(to);
         }
     }
 
@@ -107,9 +108,8 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
 
             PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
 
-            for (MethodHandle mh : fMap.doubleFields) {
-                Double d = (Double) mh.invoke(packet);
-                if (d == null) continue;
+            for (long offset : fMap.doubleOffsets) {
+                double d = UnsafeUtil.getDouble(packet, offset);
                 if (Double.isNaN(d) || Double.isInfinite(d)) {
                     module.flag(player, "Exploit: Invalid Double Position", 10.0);
                     return false;
@@ -124,51 +124,49 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
                 }
             }
 
-            for (MethodHandle mh : fMap.floatFields) {
-                Float fl = (Float) mh.invoke(packet);
-                if (fl == null) continue;
+            for (long offset : fMap.floatOffsets) {
+                float fl = UnsafeUtil.getFloat(packet, offset);
                 if (Float.isNaN(fl) || Float.isInfinite(fl)) {
                     module.flag(player, "Exploit: Invalid Float Rotation", 10.0);
                     return false;
                 }
-                if (Math.abs(fl) > 100_000.0F) {
+                if (Math.abs(fl) > MAX_ROTATION) {
                     module.flag(player, "Exploit: Extreme rotation (" + fl + ")", 10.0);
                     return false;
                 }
             }
 
-            double[] cachedLoc = safeLocationCache.get(player.getUniqueId());
+            CachedLocation cachedLoc = safeLocationCache.get(player.getUniqueId());
 
-            for (MethodHandle mh : fMap.blockPosFields) {
-                Object val = mh.invoke(packet);
+            for (long offset : fMap.blockPosOffsets) {
+                Object val = UnsafeUtil.getObject(packet, offset);
                 if (val == null) continue;
 
-                List<Field> bpFields = blockPosFieldsMap.computeIfAbsent(val.getClass(), this::mapBlockPosFields);
-                int[] xyz = new int[3];
-                int idx = 0;
+                long[] bpOffsets = blockPosFieldsMap.computeIfAbsent(val.getClass(), this::mapBlockPosFields);
 
-                for (Field bf : bpFields) {
-                    MethodHandle bmh = ReflectionUtil.getGetter(bf);
-                    if (bmh == null) continue;
-                    int coord = (int) bmh.invoke(val);
+                int bX = 0, bY = 0, bZ = 0;
+
+                for (int i = 0; i < bpOffsets.length; i++) {
+                    int coord = UnsafeUtil.getInt(val, bpOffsets[i]);
                     if (Math.abs(coord) > maxAbsoluteCoord) {
                         module.flag(player, "Exploit: Invalid BlockPos (" + coord + ")", 10.0);
                         return false;
                     }
-                    if (idx < 3) xyz[idx++] = coord;
+                    if (i == 0) bX = coord;
+                    else if (i == 1) bY = coord;
+                    else if (i == 2) bZ = coord;
                 }
 
-                if (cachedLoc != null && maxInteractDistanceSq > 0) {
-                    double distSq = distanceSquared(cachedLoc[0], cachedLoc[1], cachedLoc[2], xyz[0], xyz[1], xyz[2]);
+                if (cachedLoc != null && maxInteractDistanceSq > 0 && bpOffsets.length >= 3) {
+                    double distSq = distanceSquared(cachedLoc.x, cachedLoc.y, cachedLoc.z, bX, bY, bZ);
                     if (distSq > maxInteractDistanceSq) {
-
                         module.flag(player, "Exploit: Out of Range Interaction", 5.0);
                         return false;
                     }
                 }
             }
 
-        } catch (Throwable e) {
+        } catch (Exception e) {
             if (module.getConfigManager().isDebugMode()) {
                 e.printStackTrace();
             }
@@ -185,36 +183,58 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
 
     private PacketFieldMap mapFields(Class<?> clazz) {
         PacketFieldMap map = new PacketFieldMap();
+        List<Long> dList = new ArrayList<>();
+        List<Long> fList = new ArrayList<>();
+        List<Long> bList = new ArrayList<>();
+
         for (Field f : ReflectionUtil.getCachedFields(clazz)) {
-            MethodHandle mh = ReflectionUtil.getGetter(f);
-            if (mh == null) continue;
+            long offset = UnsafeUtil.objectFieldOffset(f);
+            if (offset == -1) continue;
 
             Class<?> type = f.getType();
-            if (type == double.class || type == Double.class) {
-                map.doubleFields.add(mh);
-            } else if (type == float.class || type == Float.class) {
-                map.floatFields.add(mh);
+            if (type == double.class) {
+                dList.add(offset);
+            } else if (type == float.class) {
+                fList.add(offset);
             } else if (type.getSimpleName().equals("BlockPosition") || type.getSimpleName().equals("BlockPos")) {
-                map.blockPosFields.add(mh);
+                bList.add(offset);
             }
         }
+
+        map.doubleOffsets = dList.stream().mapToLong(l -> l).toArray();
+        map.floatOffsets = fList.stream().mapToLong(l -> l).toArray();
+        map.blockPosOffsets = bList.stream().mapToLong(l -> l).toArray();
+
         return map;
     }
 
-    private List<Field> mapBlockPosFields(Class<?> clazz) {
-        List<Field> fields = new ArrayList<>();
+    private long[] mapBlockPosFields(Class<?> clazz) {
+        List<Long> offsets = new ArrayList<>();
         for (Field bf : ReflectionUtil.getAllCachedFields(clazz)) {
             if (Modifier.isStatic(bf.getModifiers())) continue;
-            if (bf.getType() == int.class || bf.getType() == Integer.class) {
-                fields.add(bf);
+            if (bf.getType() == int.class) {
+                long offset = UnsafeUtil.objectFieldOffset(bf);
+                if (offset != -1) {
+                    offsets.add(offset);
+                }
             }
         }
-        return fields;
+        return offsets.stream().mapToLong(l -> l).toArray();
+    }
+
+    private static class CachedLocation {
+        volatile double x, y, z;
+
+        void update(Location loc) {
+            this.x = loc.getX();
+            this.y = loc.getY();
+            this.z = loc.getZ();
+        }
     }
 
     private static class PacketFieldMap {
-        final List<MethodHandle> doubleFields = new ArrayList<>();
-        final List<MethodHandle> floatFields = new ArrayList<>();
-        final List<MethodHandle> blockPosFields = new ArrayList<>();
+        long[] doubleOffsets = new long[0];
+        long[] floatOffsets = new long[0];
+        long[] blockPosOffsets = new long[0];
     }
 }

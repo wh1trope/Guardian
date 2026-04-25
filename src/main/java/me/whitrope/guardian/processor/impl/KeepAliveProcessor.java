@@ -15,21 +15,23 @@
  */
 
 
-/**
- * Monitors keep-alive packets to detect potential network manipulation.
- */
 package me.whitrope.guardian.processor.impl;
 
 import io.netty.channel.Channel;
 import io.netty.util.AttributeKey;
 import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.PacketProcessor;
+import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Monitors keep-alive packets to detect potential network manipulation.
+ */
 public class KeepAliveProcessor implements PacketProcessor {
 
     private static final AttributeKey<Data> KEY = AttributeKey.valueOf("guardian_keepalive");
@@ -50,11 +52,7 @@ public class KeepAliveProcessor implements PacketProcessor {
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
         try {
-            Data data = channel.attr(KEY).get();
-            if (data == null) {
-                data = new Data();
-                channel.attr(KEY).set(data);
-            }
+            Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
             long now = System.currentTimeMillis();
             if (now - data.windowStart >= 1000L) {
                 data.windowStart = now;
@@ -66,7 +64,9 @@ public class KeepAliveProcessor implements PacketProcessor {
             }
 
             for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                Object val = f.get(packet);
+                MethodHandle mh = ReflectionUtil.getGetter(f);
+                if (mh == null) continue;
+                Object val = mh.invoke(packet);
                 if (val instanceof Long l) {
                     if (l == 0L && data.lastId == 0L) {
                         module.flag(player, "Exploit: KeepAlive zero-id spam", 10.0);
@@ -81,7 +81,7 @@ public class KeepAliveProcessor implements PacketProcessor {
                     data.lastId = i;
                 }
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;
