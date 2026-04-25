@@ -22,7 +22,7 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 import java.util.logging.Level;
 
-/*
+/**
  * This class is used to get the offset of a field in an object.
  */
 public final class UnsafeUtil {
@@ -39,8 +39,7 @@ public final class UnsafeUtil {
         }
     }
 
-    private UnsafeUtil() {
-    }
+    private UnsafeUtil() {}
 
     public static Unsafe getUnsafe() {
         return unsafe;

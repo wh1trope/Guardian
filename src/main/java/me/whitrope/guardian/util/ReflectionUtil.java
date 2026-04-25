@@ -41,8 +41,7 @@ public final class ReflectionUtil {
     private static final Map<Field, MethodHandle> GETTER_CACHE = new ConcurrentHashMap<>();
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
-    private ReflectionUtil() {
-    }
+    private ReflectionUtil() {}
 
     public static Field[] getCachedFields(Class<?> clazz) {
         return FIELD_CACHE.computeIfAbsent(clazz, k -> {
