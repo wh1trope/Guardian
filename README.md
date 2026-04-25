@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🛡️ Guardian AntiCrash</h1>
+  <h1>🛡️ Guardian AntiCrash Plugin</h1>
   <p><strong>A high-performance, comprehensive exploit and crash protection plugin for Minecraft 1.20+</strong></p>
   <br>
   
