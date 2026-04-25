@@ -1,0 +1,44 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'me.whitrope'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/' }
+}
+
+dependencies {
+    compileOnly 'org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT'
+    compileOnly 'io.netty:netty-all:4.1.87.Final'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+jar {
+    archiveClassifier.set('')
+}
+
+processResources {
+    def props = [version: project.version]
+    inputs.properties props
+    filteringCharset = 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+javadoc {
+    options.encoding = 'UTF-8'
+}

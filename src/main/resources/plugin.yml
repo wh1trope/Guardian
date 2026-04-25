@@ -1,0 +1,9 @@
+name: Guardian
+version: '${version}'
+author: whitrope
+main: me.whitrope.guardian.Guardian
+api-version: '1.20'
+
+commands:
+  guardian:
+    description: "Main command for Guardian"

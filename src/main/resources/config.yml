@@ -1,0 +1,272 @@
+# ================================================================
+# Guardian AntiCrash Configuration
+# ================================================================
+
+modules:
+  # Protects against packet-level crashes
+  CrashShield:
+    enabled: true
+    max-vl: 10
+    checks:
+      # Scans strings and collections in packets
+      string-exploit: true
+      # Validates plugin-message channels
+      payload-exploit: true
+      # Rejects ghost book edit packets
+      ghost-book: true
+      # Validates creative-mode inventory slots
+      creative-slot: true
+      # Deep scan NBT in inventory click packets
+      nbt-exploit: true
+      # Rejects invalid vector points and NaN rotation
+      invalid-position: true
+      # Validates PickItem slot range (blocks Spigot exception exploit)
+      pick-item: true
+      # Rate-limits RecipeBook packets and validates ResourceLocation data
+      recipe-book: true
+
+  # Rate-limits packets per second to prevent floods
+  PacketGuard:
+    enabled: true
+    max-vl: 50
+
+  # Rate-limits individual packet families (clicks, chat, tab-complete, etc.)
+  ActivityGuard:
+    enabled: true
+    max-vl: 40
+    checks:
+      # Limits inventory click rate and validates mode/button values
+      window-click: true
+      # Validates sign line length, color spam and NULs; rate-limits updates
+      sign-update: true
+      # Rate-limits tab-complete requests (classic lag exploit)
+      command-suggestion: true
+      # Rate-limits chat and chat-command packets
+      chat: true
+      # Rate-limits plugin-message packets (separate from size checks)
+      plugin-message-flood: true
+      # Rate-limits block place / dig / use-item / entity interact
+      interact-flood: true
+      # Rate-limits sneak/sprint/jump and steer packets
+      entity-action-flood: true
+      # Rate-limits KeepAlive/Transaction responses; blocks forged IDs
+      keepalive: true
+      # Rate-limits ResourcePack status responses
+      resource-pack-status: true
+      # Blocks Meteor VehicleFlood crasher (spam VehicleMove/BoatPaddleState)
+      vehicle-flood: true
+      # Rate-limits container close packets (chest open/close spam)
+      container-close-flood: true
+
+  # Validates items and inventory interactions
+  ExploitBlocker:
+    enabled: true
+    max-vl: 5
+    checks:
+      # Rejects invalid stack sizes (<0 or >127)
+      invalid-stack-size: true
+      # Blocks illegal enchantment levels
+      illegal-enchant-level: true
+      # Blocks oversized display names
+      oversized-display-name: true
+      # Rejects books with too many pages
+      oversized-book: true
+      # Restricts the maximum number of bees in a beehive item
+      oversized-beehive: true
+      # Prevents nested containers (shulker in shulker)
+      nested-shulker-box: true
+      # Blocks bundles completely
+      block-bundles: true
+      # Blocks books completely
+      block-books: false
+      # Blocks skulls and heads completely
+      block-skulls: false
+      # Blocks custom and filled maps completely
+      block-maps: false
+      # Blocks crafting and placing armor stands
+      block-armorstands: false
+      # Blocks Lecterns completely (opening, crafting, placing)
+      block-lecterns: true
+
+  # Caps piston/entity actions to prevent lag machines
+  LagControl:
+    enabled: true
+    max-vl: 30
+
+  # Validates logins and rate-limits connections
+  ConnectionGuard:
+    enabled: true
+    max-vl: 5
+    checks:
+      # Enforces delay between joins from same IP
+      join-rate-limit: true
+      # Checks username length
+      username-length: true
+      # Validates username characters
+      username-characters: true
+      # Blocks usernames matching blacklisted patterns
+      username-blacklist: true
+
+# Numeric thresholds for modules
+limits:
+  crash-shield:
+    # Maximum allowed characters in a single string within a packet
+    max-string-length: 16384
+    # Maximum allowed elements in a collection (e.g., lists, arrays) within a packet
+    max-collection-size: 1024
+    # Maximum allowed length of a plugin message channel name
+    max-payload-channel-length: 256
+    # Maximum nesting depth for NBT trees to prevent StackOverflows
+    max-nbt-depth: 8
+    # Maximum allowed §-color codes per scanned string
+    max-color-codes: 64
+    # Maximum allowed zero-width / BOM characters per scanned string
+    max-zero-width: 8
+    # Maximum allowed ASCII control chars (\x00-\x1F, excluding \t\r\n); 0 forbids them
+    max-control-chars: 0
+    # Maximum length of a Unicode NFKC-normalized string (Zalgo bomb defence)
+    max-normalized-length: 32768
+    # Maximum bytes of a raw payload (ByteBuf / byte[])
+    max-payload-bytes: 32767
+    # Maximum plugin-message packets per second
+    max-payloads-per-second: 16
+    # If true, only payloads on whitelisted channels are accepted
+    payload-whitelist-enforce: false
+    payload-whitelist: []
+    book:
+      # Maximum pages allowed inside an EditBook packet
+      max-pages: 50
+      # Maximum characters on a single book page
+      max-page-length: 2048
+      # Maximum total characters across all pages
+      max-total-length: 12288
+      # Maximum §-color codes per page
+      max-color-codes: 32
+      # Maximum EditBook packets per second
+      max-edits-per-second: 2
+    nbt:
+      # Maximum children (map entries / list items) inside a single NBT node
+      max-children: 512
+      # Maximum length of a serialized ItemStack/NBT string
+      max-serialized-size: 65536
+      # Maximum total nodes the recursive NBT walker may visit before blocking.
+      # Prevents exponential expansion attacks (e.g. nested crossbow ChargedProjectiles).
+      # Normal items have <100 nodes; 4096 provides a generous margin.
+      max-total-nodes: 4096
+      # If true, the NBT key blacklist is enforced against serialized items
+      enforce-key-blacklist: false
+      key-blacklist: []
+    movement:
+      # Maximum absolute coordinate value accepted in move packets
+      max-absolute-coord: 30000000
+      # If true, VehicleMove packets are rejected unless the player has a vehicle
+      require-vehicle: true
+      # Maximum distance squared allowed between a player and a block interaction.
+      # Set to 0 to disable. (225 = 15 blocks, 625 = 25 blocks)
+      max-interact-distance: 225
+    # If true, CreativeSlot packets from non-creative players are blocked
+    creative-slot-require-creative: true
+    recipe-book:
+      # Maximum RecipeBook packets per second
+      per-second: 10
+      # Maximum length of a ResourceLocation string in recipe packets
+      max-resource-location-length: 256
+
+  packet-guard:
+    # Absolute maximum packets a player can send per second before instant kick
+    hardcap-pps: 500
+    # General packet limit using 10x100ms sliding window
+    global-pps: 800
+    # Maximum flying/position packets per second (sliding window)
+    flying-pps: 100
+    # Maximum animation (arm swing) packets per second (sliding window)
+    animation-pps: 60
+    # Maximum size in bytes of a single raw ByteBuf packet payload
+    max-capacity: 32768
+    # Maximum total bytes per second a player can send (Bandwidth limit)
+    max-bandwidth: 1048576
+
+  activity-guard:
+    # Per-tick/per-second throttles for individual packet families.
+    command-suggestion:
+      per-second: 10
+      per-tick: 2
+    chat:
+      per-second: 6
+      per-tick: 2
+    plugin-message:
+      per-second: 30
+      per-tick: 4
+    interact:
+      per-second: 40
+      per-tick: 6
+    entity-action:
+      per-second: 30
+      per-tick: 5
+    resource-pack-status:
+      per-second: 8
+      per-tick: 2
+    vehicle-flood:
+      per-second: 100
+      per-tick: 20
+    container-close:
+      per-second: 10
+      per-tick: 3
+    max-clicks-per-second: 80
+    max-clicks-per-tick: 16
+    # Maximum allowed slot value in WindowClick packets.
+    # Vanilla max is ~90 (double chest + player inv); 128 provides a generous margin.
+    max-slot-value: 128
+    # Sign update validation limits
+    sign:
+      max-line-length: 384
+      max-color-codes: 16
+      per-second: 4
+    # KeepAlive / Transaction response rate
+    keepalive:
+      per-second: 4
+
+  exploit-blocker:
+    # Maximum allowed characters in an item's display name
+    max-display-name-length: 512
+    # Maximum allowed pages in a written book
+    max-book-pages: 10
+    # Maximum allowed level for any enchantment
+    max-enchant-level: 255
+    # Maximum allowed bees nested inside a single beehive item
+    max-beehive-size: 10
+
+  lag-control:
+    # Maximum times pistons can push/pull blocks per server tick
+    max-piston-activations-per-tick: 300
+    # Maximum entities allowed spawning in a single chunk per tick
+    max-entity-spawns-per-tick: 100
+
+  connection-guard:
+    # Minimum time in milliseconds between joins from the same IP address. Use 0 or -1 to disable.
+    min-join-delay-ms: 1000
+    # Maximum login attempts per second per IP address. Set to 0 or negative to disable.
+    pre-login-ip-per-second: 5
+    username:
+      # Minimum length of a player's username
+      min-length: 3
+      # Maximum length of a player's username
+      max-length: 16
+      # Regex pattern that valid usernames must match
+      allowed-pattern: '^[a-zA-Z0-9_]+$'
+      # List of Regex patterns that will reject a username
+      blacklisted-patterns:
+        - '^[0-9]+$'
+
+settings:
+  # Enable for verbose logging
+  debug-mode: false
+  # Enable to log detected exploits
+  log-exploits: true
+  # Crash the game of players who try to crash the server instead of kicking them
+  crash-back: false
+  temp-ban:
+    # Enable temp-bans for punished players
+    enabled: false
+    # Duration of the temp-ban in minutes
+    duration-minutes: 5
