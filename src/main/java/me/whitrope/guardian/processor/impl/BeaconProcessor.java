@@ -54,7 +54,7 @@ public class BeaconProcessor implements PacketProcessor {
                     module.flag(player, "Exploit: Invalid Beacon Effect ID (" + val + ")", 10.0);
                     return false;
                 } else if (primary instanceof Optional<?> opt) {
-                    if (opt.isPresent() && opt.get().toString().contains("minecraft:") == false && opt.get().toString().length() > 50) {
+                    if (opt.isPresent() && !opt.get().toString().contains("minecraft:") && opt.get().toString().length() > 50) {
                          module.flag(player, "Exploit: Malformed Beacon Effect", 5.0);
                          return false;
                     }

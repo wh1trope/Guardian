@@ -21,7 +21,6 @@ import me.whitrope.guardian.module.GuardianModule;
 import me.whitrope.guardian.processor.PacketProcessor;
 import me.whitrope.guardian.util.ReflectionUtil;
 import me.whitrope.guardian.util.UnsafeUtil;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Field;

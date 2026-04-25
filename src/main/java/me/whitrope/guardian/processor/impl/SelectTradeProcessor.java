@@ -26,7 +26,7 @@ import org.bukkit.entity.Player;
 import java.lang.reflect.Field;
 
 /**
- * Validates villager trade selection packets to prevent index out of bounds crashes.
+ * Validates villager trade selection packets to prevent index-out-of-bounds crashes.
  */
 public class SelectTradeProcessor implements PacketProcessor {
 
