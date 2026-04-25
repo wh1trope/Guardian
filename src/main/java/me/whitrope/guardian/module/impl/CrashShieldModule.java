@@ -113,8 +113,28 @@ public class CrashShieldModule extends GuardianModule {
             RecipeBookProcessor recipeBookProcessor = new RecipeBookProcessor(this);
             addSpecificProcessor("ServerboundRecipeBookSeenRecipePacket", recipeBookProcessor);
             addSpecificProcessor("ServerboundRecipeBookChangeSettingsPacket", recipeBookProcessor);
+            addSpecificProcessor("ServerboundPlaceRecipePacket", recipeBookProcessor);
             addSpecificProcessor("PacketPlayInRecipeDisplayed", recipeBookProcessor);
             addSpecificProcessor("PacketPlayInRecipeSettings", recipeBookProcessor);
+            addSpecificProcessor("PacketPlayInAutoRecipe", recipeBookProcessor);
+        }
+
+        if (getConfigManager().isCheckEnabled("CrashShield", "beacon-effect")) {
+            BeaconProcessor beaconProcessor = new BeaconProcessor(this);
+            addSpecificProcessor("ServerboundSetBeaconPacket", beaconProcessor);
+            addSpecificProcessor("PacketPlayInBeacon", beaconProcessor);
+        }
+
+        if (getConfigManager().isCheckEnabled("CrashShield", "select-trade")) {
+            SelectTradeProcessor tradeProcessor = new SelectTradeProcessor(this);
+            addSpecificProcessor("ServerboundSelectTradePacket", tradeProcessor);
+            addSpecificProcessor("PacketPlayInTrSel", tradeProcessor);
+        }
+
+        if (getConfigManager().isCheckEnabled("CrashShield", "command-minecart")) {
+            CommandMinecartProcessor minecartProcessor = new CommandMinecartProcessor(this);
+            addSpecificProcessor("ServerboundSetCommandMinecartPacket", minecartProcessor);
+            addSpecificProcessor("PacketPlayInSetCommandMinecart", minecartProcessor);
         }
     }
 }

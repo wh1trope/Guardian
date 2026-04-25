@@ -52,6 +52,10 @@ public class ViolationManager {
     }
 
     public ViolationUser getUser(Player player) {
+        ViolationUser user = activeUsers.get(player.getUniqueId());
+        if (user != null && user.getOwner() == player) {
+            return user;
+        }
         return activeUsers.compute(player.getUniqueId(), (uuid, existing) -> {
             if (existing != null && existing.getOwner() == player) return existing;
             return new ViolationUser(player);

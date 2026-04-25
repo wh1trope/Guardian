@@ -24,12 +24,12 @@ import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import me.whitrope.guardian.util.UnsafeUtil;
 
 /**
  * Validates recipe book interactions to prevent related exploits.
@@ -37,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RecipeBookProcessor implements PacketProcessor {
 
     private static final AttributeKey<Data> DATA_KEY = AttributeKey.valueOf("guardian_recipebook_data");
-    private static final Map<Class<?>, List<MethodHandle>> TARGET_GETTERS = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, long[]> TARGET_OFFSETS = new ConcurrentHashMap<>();
     private final GuardianModule module;
     private volatile int maxPerSecond;
     private volatile int maxResourceLocationLength;
@@ -53,54 +53,50 @@ public class RecipeBookProcessor implements PacketProcessor {
         this.maxResourceLocationLength = module.getConfigManager().getLimitConfig("crash-shield.recipe-book.max-resource-location-length", 256);
     }
 
-    private List<MethodHandle> getTargetGetters(Class<?> clazz) {
-        return TARGET_GETTERS.computeIfAbsent(clazz, k -> {
-            List<MethodHandle> handles = new ArrayList<>();
+    private long[] getTargetOffsets(Class<?> clazz) {
+        return TARGET_OFFSETS.computeIfAbsent(clazz, k -> {
+            List<Long> offsets = new ArrayList<>();
             for (Field f : ReflectionUtil.getCachedFields(k)) {
                 Class<?> fType = f.getType();
                 if (fType.equals(String.class) ||
                         fType.getSimpleName().contains("ResourceLocation") ||
                         fType.getSimpleName().contains("MinecraftKey")) {
-                    MethodHandle mh = ReflectionUtil.getGetter(f);
-                    if (mh != null) handles.add(mh);
+                    long offset = UnsafeUtil.objectFieldOffset(f);
+                    if (offset != -1) offsets.add(offset);
                 }
             }
-            return handles;
+            return offsets.stream().mapToLong(l -> l).toArray();
         });
     }
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
 
-            Data data = AttributeUtil.getOrCreate(channel, DATA_KEY, Data::new);
-            long now = System.currentTimeMillis();
-            if (now - data.secondStart >= 1000L) {
-                data.secondStart = now;
-                data.perSecond = 0;
-            }
-            if (maxPerSecond > 0 && ++data.perSecond > maxPerSecond) {
-                module.flag(player, "Flood: RecipeBook (" + data.perSecond + "/s)", 5.0);
-                return false;
-            }
+        Data data = AttributeUtil.getOrCreate(channel, DATA_KEY, Data::new);
+        long now = System.currentTimeMillis();
+        if (now - data.secondStart >= 1000L) {
+            data.secondStart = now;
+            data.perSecond = 0;
+        }
+        if (maxPerSecond > 0 && ++data.perSecond > maxPerSecond) {
+            module.flag(player, "Flood: RecipeBook (" + data.perSecond + "/s)", 5.0);
+            return false;
+        }
 
-            for (MethodHandle mh : getTargetGetters(packet.getClass())) {
-                Object val = mh.invoke(packet);
-                if (val instanceof String str) {
-                    if (str.length() > maxResourceLocationLength) {
-                        module.flag(player, "Exploit: Oversized RecipeBook ResourceLocation", 5.0);
-                        return false;
-                    }
-                } else if (val != null) {
-                    String rlStr = val.toString();
-                    if (rlStr.length() > maxResourceLocationLength) {
-                        module.flag(player, "Exploit: Oversized RecipeBook ResourceLocation", 5.0);
-                        return false;
-                    }
+        for (long offset : getTargetOffsets(packet.getClass())) {
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val instanceof String str) {
+                if (str.length() > maxResourceLocationLength) {
+                    module.flag(player, "Exploit: Oversized RecipeBook ResourceLocation", 5.0);
+                    return false;
+                }
+            } else if (val != null) {
+                String rlStr = val.toString();
+                if (rlStr.length() > maxResourceLocationLength) {
+                    module.flag(player, "Exploit: Oversized RecipeBook ResourceLocation", 5.0);
+                    return false;
                 }
             }
-        } catch (Throwable e) {
-            if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;
     }

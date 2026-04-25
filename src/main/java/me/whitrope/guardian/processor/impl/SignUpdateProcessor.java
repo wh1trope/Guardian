@@ -24,9 +24,9 @@ import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
+import me.whitrope.guardian.util.UnsafeUtil;
 
 /**
  * Validates sign update packets to prevent text-based exploits or crashes.
@@ -54,36 +54,32 @@ public class SignUpdateProcessor implements PacketProcessor {
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
-            long now = System.currentTimeMillis();
-            if (now - data.windowStart >= 1000L) {
-                data.windowStart = now;
-                data.count.set(0);
-            }
-            if (maxPerSecond > 0 && data.count.incrementAndGet() > maxPerSecond) {
-                module.flag(player, "Exploit: Sign update flood", 5.0);
-                return false;
-            }
+        Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
+        long now = System.currentTimeMillis();
+        if (now - data.windowStart >= 1000L) {
+            data.windowStart = now;
+            data.count.set(0);
+        }
+        if (maxPerSecond > 0 && data.count.incrementAndGet() > maxPerSecond) {
+            module.flag(player, "Exploit: Sign update flood", 5.0);
+            return false;
+        }
 
-            for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                MethodHandle mh = ReflectionUtil.getGetter(f);
-                if (mh == null) continue;
-                Object val = mh.invoke(packet);
-                if (val instanceof String[] arr) {
-                    if (arr.length > 4) {
-                        module.flag(player, "Exploit: Sign has " + arr.length + " lines", 10.0);
-                        return false;
-                    }
-                    for (String line : arr) {
-                        if (!checkLine(line, player)) return false;
-                    }
-                } else if (val instanceof String s) {
-                    if (!checkLine(s, player)) return false;
+        for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
+            long offset = UnsafeUtil.objectFieldOffset(f);
+            if (offset == -1) continue;
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val instanceof String[] arr) {
+                if (arr.length > 4) {
+                    module.flag(player, "Exploit: Sign has " + arr.length + " lines", 10.0);
+                    return false;
                 }
+                for (String line : arr) {
+                    if (!checkLine(line, player)) return false;
+                }
+            } else if (val instanceof String s) {
+                if (!checkLine(s, player)) return false;
             }
-        } catch (Throwable e) {
-            if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;
     }

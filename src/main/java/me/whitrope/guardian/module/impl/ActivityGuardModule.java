@@ -111,6 +111,30 @@ public class ActivityGuardModule extends GuardianModule {
                     10, 3, 5.0,
                     "ServerboundContainerClosePacket", "PacketPlayInCloseWindow");
         }
+
+        if (cfg.isCheckEnabled("ActivityGuard", "pick-item-flood")) {
+            registerRate("PickItem", "activity-guard.pick-item",
+                    10, 3, 5.0,
+                    "ServerboundPickItemPacket", "PacketPlayInPickItem");
+        }
+
+        if (cfg.isCheckEnabled("ActivityGuard", "place-recipe-flood")) {
+            registerRate("PlaceRecipe", "activity-guard.place-recipe",
+                    5, 2, 5.0,
+                    "ServerboundPlaceRecipePacket", "PacketPlayInAutoRecipe");
+        }
+
+        if (cfg.isCheckEnabled("ActivityGuard", "chunk-batch-flood")) {
+            registerRate("ChunkBatch", "activity-guard.chunk-batch",
+                    5, 2, 5.0,
+                    "ServerboundChunkBatchReceivedPacket");
+        }
+
+        if (cfg.isCheckEnabled("ActivityGuard", "difficulty-change-flood")) {
+            registerRate("DifficultyChange", "activity-guard.difficulty-change",
+                    2, 1, 5.0,
+                    "ServerboundChangeDifficultyPacket");
+        }
     }
 
     private void register(PacketProcessor processor, String... packetNames) {

@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
 
 /**
  * Base class for all plugin modules, defining standard enable/disable behavior.
@@ -40,6 +41,7 @@ public abstract class GuardianModule {
     protected final List<PacketProcessor> globalIncomingProcessors = new ArrayList<>();
     protected final Map<String, List<PacketProcessor>> specificIncomingProcessors = new ConcurrentHashMap<>();
     private final Map<Class<?>, List<PacketProcessor>> processorsByClass = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, String> packetNamesCache = new ConcurrentHashMap<>();
     private final Guardian plugin;
     private final boolean hasOutgoingHandler;
     private boolean enabled;
@@ -123,25 +125,39 @@ public abstract class GuardianModule {
         Class<?> cls = packet.getClass();
 
         List<PacketProcessor> specifics = processorsByClass.get(cls);
-        String packetName = null;
+        String packetName = packetNamesCache.computeIfAbsent(cls, Class::getSimpleName);
+        
         if (specifics == null) {
-            packetName = cls.getSimpleName();
             List<PacketProcessor> registered = specificIncomingProcessors.get(packetName);
             specifics = registered != null ? registered : NONE;
             processorsByClass.put(cls, specifics);
         }
 
         if (!globalIncomingProcessors.isEmpty()) {
-            if (packetName == null) packetName = cls.getSimpleName();
             for (PacketProcessor p : globalIncomingProcessors) {
-                if (!p.process(packet, player, packetName, channel)) return false;
+                try {
+                    if (!p.process(packet, player, packetName, channel)) return false;
+                } catch (Throwable e) {
+                    if (getConfigManager().isDebugMode()) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "Exception in processor " + p.getClass().getSimpleName()
+                                        + " for packet " + packetName + " from " + player.getName(), e);
+                    }
+                }
             }
         }
 
         if (specifics != NONE) {
-            if (packetName == null) packetName = cls.getSimpleName();
             for (PacketProcessor p : specifics) {
-                if (!p.process(packet, player, packetName, channel)) return false;
+                try {
+                    if (!p.process(packet, player, packetName, channel)) return false;
+                } catch (Throwable e) {
+                    if (getConfigManager().isDebugMode()) {
+                        plugin.getLogger().log(Level.WARNING,
+                                "Exception in processor " + p.getClass().getSimpleName()
+                                        + " for packet " + packetName + " from " + player.getName(), e);
+                    }
+                }
             }
         }
         return true;

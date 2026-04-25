@@ -27,6 +27,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.UUID;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.net.InetSocketAddress;
 
 /**
  * Manages network capacity and prevents packet flooding at the network layer.
@@ -34,41 +38,47 @@ import java.util.UUID;
 public class CapacityHandler extends ChannelInboundHandlerAdapter {
 
     private final Guardian plugin;
-    private final UUID playerUUID;
+    private final Player player;
+    private final ViolationUser cachedUser;
     private final String playerName;
     private final int maxCapacity;
     private final int maxBandwidth;
+    private final long maxBandwidthPerIp;
     private long lastBandwidthReset;
     private int currentBandwidth;
+    private String clientIp;
+
+    private static final Map<String, IpData> ipDataMap = new ConcurrentHashMap<>();
 
     public CapacityHandler(Guardian plugin, Player player) {
         this.plugin = plugin;
-        this.playerUUID = player.getUniqueId();
+        this.player = player;
+        this.cachedUser = plugin.getViolationManager().getUser(player);
         this.playerName = player.getName();
         this.maxCapacity = plugin.getConfigManager().getLimitConfig("packet-guard.max-capacity", 32768);
         this.maxBandwidth = plugin.getConfigManager().getLimitConfig("packet-guard.max-bandwidth", 1048576);
+        this.maxBandwidthPerIp = plugin.getConfigManager().getLimitLong("packet-guard.max-bandwidth-per-ip", 5242880);
         this.lastBandwidthReset = System.currentTimeMillis();
     }
 
-    private Player getPlayer() {
-        return Bukkit.getPlayer(playerUUID);
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        super.channelActive(ctx);
+        if (ctx.channel().remoteAddress() instanceof InetSocketAddress address) {
+            this.clientIp = address.getAddress().getHostAddress();
+        } else {
+            this.clientIp = "unknown";
+        }
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        Player player = getPlayer();
-        if (player == null) {
-            super.channelRead(ctx, msg);
-            return;
-        }
-
         if (!player.isOnline()) {
             releaseMsg(msg);
             return;
         }
 
-        ViolationUser user = plugin.getViolationManager().peekUser(player);
-        if (user != null && user.isPendingKick()) {
+        if (cachedUser != null && cachedUser.isPendingKick()) {
             releaseMsg(msg);
             return;
         }
@@ -83,8 +93,30 @@ public class CapacityHandler extends ChannelInboundHandlerAdapter {
             }
 
             currentBandwidth += readableBytes;
+            long now = System.currentTimeMillis();
+
+            if (clientIp != null && !clientIp.equals("unknown") && maxBandwidthPerIp > 0) {
+                IpData data = ipDataMap.computeIfAbsent(clientIp, k -> new IpData());
+                synchronized (data) {
+                    if (now - data.lastCheck > 1000) {
+                        data.lastCheck = now;
+                        data.bytes = 0;
+                    }
+                    data.bytes += readableBytes;
+                    if (data.bytes > maxBandwidthPerIp) {
+                        if (plugin.getConfigManager().isDebugMode()) {
+                            plugin.getLogger().warning("Dropped raw packet from " + playerName + " (IP " + clientIp + ") due to global IP bandwidth limit: " + data.bytes + " bytes/s");
+                        }
+                        boolean isCrash = plugin.getConfigManager().isCrashBack();
+                        plugin.getViolationManager().addLog(new ViolationLog(playerName, "PacketGuard", "Global IP Bandwidth limit exceeded: " + data.bytes + " bytes", isCrash));
+                        plugin.getPunishmentService().punish(player, "&cConnection lost (Global Bandwidth limit exceeded)");
+                        buf.release();
+                        return;
+                    }
+                }
+            }
+
             if (maxBandwidth > 0 && currentBandwidth > maxBandwidth) {
-                long now = System.currentTimeMillis();
                 if (now - lastBandwidthReset >= 1000L) {
                     lastBandwidthReset = now;
                     currentBandwidth = readableBytes;
@@ -99,7 +131,6 @@ public class CapacityHandler extends ChannelInboundHandlerAdapter {
                     return;
                 }
             } else if (maxBandwidth > 0 && currentBandwidth > (maxBandwidth / 2) && currentBandwidth % 1024 == 0) {
-                long now = System.currentTimeMillis();
                 if (now - lastBandwidthReset >= 1000L) {
                     lastBandwidthReset = now;
                     currentBandwidth = readableBytes;
@@ -131,5 +162,10 @@ public class CapacityHandler extends ChannelInboundHandlerAdapter {
         } else {
             ReferenceCountUtil.release(msg);
         }
+    }
+
+    private static class IpData {
+        long bytes = 0;
+        long lastCheck = System.currentTimeMillis();
     }
 }

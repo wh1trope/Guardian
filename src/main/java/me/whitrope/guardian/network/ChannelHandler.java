@@ -52,7 +52,7 @@ public class ChannelHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (!player.isOnline()) {
+        if (!ctx.channel().isActive()) {
             ReferenceCountUtil.release(msg);
             return;
         }

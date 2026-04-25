@@ -24,6 +24,12 @@ modules:
       pick-item: true
       # Rate-limits RecipeBook packets and validates ResourceLocation data
       recipe-book: true
+      # Validates Beacon effect IDs
+      beacon-effect: true
+      # Validates SelectTrade index
+      select-trade: true
+      # Validates CommandMinecart strings and permissions
+      command-minecart: true
 
   # Rate-limits packets per second to prevent floods
   PacketGuard:
@@ -57,6 +63,14 @@ modules:
       vehicle-flood: true
       # Rate-limits container close packets (chest open/close spam)
       container-close-flood: true
+      # Rate-limits PickItem packets
+      pick-item-flood: true
+      # Rate-limits PlaceRecipe packets
+      place-recipe-flood: true
+      # Rate-limits ChunkBatchReceived packets (1.20.2+)
+      chunk-batch-flood: true
+      # Rate-limits ChangeDifficulty packets
+      difficulty-change-flood: true
 
   # Validates items and inventory interactions
   ExploitBlocker:
@@ -112,6 +126,10 @@ limits:
   crash-shield:
     # Maximum allowed characters in a single string within a packet
     max-string-length: 16384
+    # Max string length specifically for Anvil rename (helps prevent chunk NBT lag)
+    max-rename-length: 64
+    # Max prefix length for tab completion
+    max-tab-complete-length: 256
     # Maximum allowed elements in a collection (e.g., lists, arrays) within a packet
     max-collection-size: 1024
     # Maximum allowed length of a plugin message channel name
@@ -185,6 +203,8 @@ limits:
     max-capacity: 32768
     # Maximum total bytes per second a player can send (Bandwidth limit)
     max-bandwidth: 1048576
+    # Global limit per IP address to prevent distributed spam from single host
+    max-bandwidth-per-ip: 5242880
 
   activity-guard:
     # Per-tick/per-second throttles for individual packet families.
@@ -212,6 +232,18 @@ limits:
     container-close:
       per-second: 10
       per-tick: 3
+    pick-item:
+      per-second: 10
+      per-tick: 3
+    place-recipe:
+      per-second: 5
+      per-tick: 2
+    chunk-batch:
+      per-second: 5
+      per-tick: 2
+    difficulty-change:
+      per-second: 2
+      per-tick: 1
     max-clicks-per-second: 80
     max-clicks-per-tick: 16
     # Maximum allowed slot value in WindowClick packets.

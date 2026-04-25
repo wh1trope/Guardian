@@ -28,11 +28,11 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import me.whitrope.guardian.util.UnsafeUtil;
 
 /**
  * Processes and validates book edit packets to prevent crashes.
@@ -64,42 +64,38 @@ public class BookEditProcessor implements PacketProcessor {
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            Bukkit.getScheduler().runTask(module.getPlugin(), () -> {
-                if (player == null || !player.isOnline()) return;
-                try {
-                    ItemStack mainHand = player.getInventory().getItemInMainHand();
-                    ItemStack offHand = player.getInventory().getItemInOffHand();
-                    if (!isBook(mainHand) && !isBook(offHand)) {
-                        module.flag(player, "Exploit: Ghost Book Edit", 10.0);
-                    }
-                } catch (Exception ignored) {
+        Bukkit.getScheduler().runTask(module.getPlugin(), () -> {
+            if (player == null || !player.isOnline()) return;
+            try {
+                ItemStack mainHand = player.getInventory().getItemInMainHand();
+                ItemStack offHand = player.getInventory().getItemInOffHand();
+                if (!isBook(mainHand) && !isBook(offHand)) {
+                    module.flag(player, "Exploit: Ghost Book Edit", 100.0);
                 }
-            });
+            } catch (Exception ignored) {
+            }
+        });
 
-            BookData data = AttributeUtil.getOrCreate(channel, BOOK_DATA_KEY, BookData::new);
-            long now = System.currentTimeMillis();
-            if (now - data.windowStart >= 1000L) {
-                data.windowStart = now;
-                data.edits.set(0);
-            }
-            if (maxEditsPerSecond > 0 && data.edits.incrementAndGet() > maxEditsPerSecond) {
-                module.flag(player, "Exploit: Book edit flood", 5.0);
-                return false;
-            }
+        BookData data = AttributeUtil.getOrCreate(channel, BOOK_DATA_KEY, BookData::new);
+        long now = System.currentTimeMillis();
+        if (now - data.windowStart >= 1000L) {
+            data.windowStart = now;
+            data.edits.set(0);
+        }
+        if (maxEditsPerSecond > 0 && data.edits.incrementAndGet() > maxEditsPerSecond) {
+            module.flag(player, "Exploit: Book edit flood", 5.0);
+            return false;
+        }
 
-            for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                MethodHandle mh = ReflectionUtil.getGetter(f);
-                if (mh == null) continue;
-                Object val = mh.invoke(packet);
-                if (val instanceof List<?> list) {
-                    if (!validatePages(list, player)) return false;
-                } else if (val instanceof Collection<?> col) {
-                    if (!validatePages(col, player)) return false;
-                }
+        for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
+            long offset = UnsafeUtil.objectFieldOffset(f);
+            if (offset == -1) continue;
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val instanceof List<?> list) {
+                if (!validatePages(list, player)) return false;
+            } else if (val instanceof Collection<?> col) {
+                if (!validatePages(col, player)) return false;
             }
-        } catch (Throwable e) {
-            if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
 
         return true;

@@ -25,9 +25,13 @@ import me.whitrope.guardian.util.AttributeUtil;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import me.whitrope.guardian.util.UnsafeUtil;
 
 /**
  * Monitors keep-alive packets to detect potential network manipulation.
@@ -38,6 +42,7 @@ public class KeepAliveProcessor implements PacketProcessor {
 
     private final GuardianModule module;
     private int maxPerSecond;
+    private final Map<Class<?>, long[]> fieldCache = new ConcurrentHashMap<>();
 
     public KeepAliveProcessor(GuardianModule module) {
         this.module = module;
@@ -47,44 +52,55 @@ public class KeepAliveProcessor implements PacketProcessor {
     @Override
     public void reloadValues() {
         this.maxPerSecond = module.getConfigManager().getLimitConfig("activity-guard.keepalive.per-second", 4);
+        this.fieldCache.clear();
     }
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
-            long now = System.currentTimeMillis();
-            if (now - data.windowStart >= 1000L) {
-                data.windowStart = now;
-                data.count.set(0);
-            }
-            if (maxPerSecond > 0 && data.count.incrementAndGet() > maxPerSecond) {
-                module.flag(player, "Exploit: KeepAlive flood", 10.0);
-                return false;
-            }
+        Data data = AttributeUtil.getOrCreate(channel, KEY, Data::new);
+        long now = System.currentTimeMillis();
+        if (now - data.windowStart >= 1000L) {
+            data.windowStart = now;
+            data.count.set(0);
+        }
+        if (maxPerSecond > 0 && data.count.incrementAndGet() > maxPerSecond) {
+            module.flag(player, "Exploit: KeepAlive flood", 10.0);
+            return false;
+        }
 
-            for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                MethodHandle mh = ReflectionUtil.getGetter(f);
-                if (mh == null) continue;
-                Object val = mh.invoke(packet);
-                if (val instanceof Long l) {
-                    if (l == 0L && data.lastId == 0L) {
-                        module.flag(player, "Exploit: KeepAlive zero-id spam", 10.0);
-                        return false;
-                    }
-                    data.lastId = l;
-                } else if (val instanceof Integer i) {
-                    if (i == 0 && data.lastId == 0L) {
-                        module.flag(player, "Exploit: KeepAlive zero-id spam", 10.0);
-                        return false;
-                    }
-                    data.lastId = i;
+        long[] offsets = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
+
+        for (long offset : offsets) {
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val instanceof Long l) {
+                if (l == 0L && data.lastId == 0L) {
+                    module.flag(player, "Exploit: KeepAlive zero-id spam", 10.0);
+                    return false;
                 }
+                data.lastId = l;
+            } else if (val instanceof Integer i) {
+                if (i == 0 && data.lastId == 0L) {
+                    module.flag(player, "Exploit: KeepAlive zero-id spam", 10.0);
+                    return false;
+                }
+                data.lastId = i;
             }
-        } catch (Throwable e) {
-            if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;
+    }
+
+    private long[] mapFields(Class<?> clazz) {
+        List<Long> offsets = new ArrayList<>();
+        for (Field f : ReflectionUtil.getCachedFields(clazz)) {
+            Class<?> t = f.getType();
+            if (t == long.class || t == int.class || t == Long.class || t == Integer.class) {
+                long offset = UnsafeUtil.objectFieldOffset(f);
+                if (offset != -1) {
+                    offsets.add(offset);
+                }
+            }
+        }
+        return offsets.stream().mapToLong(l -> l).toArray();
     }
 
     private static class Data {

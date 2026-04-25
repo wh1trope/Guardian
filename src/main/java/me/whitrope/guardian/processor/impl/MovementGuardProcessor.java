@@ -30,6 +30,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.lang.reflect.Field;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Validates player movement packets to prevent movement-based exploits.
@@ -52,7 +54,7 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
     private final GuardianModule module;
     private final Map<Class<?>, PacketFieldMap> fieldCache = new ConcurrentHashMap<>();
     private final Map<Class<?>, long[]> blockPosFieldsMap = new ConcurrentHashMap<>();
-    private final Map<UUID, CachedLocation> safeLocationCache = new ConcurrentHashMap<>();
+    private final Map<UUID, AtomicReference<CachedLocation>> safeLocationCache = new ConcurrentHashMap<>();
     private double maxAbsoluteCoord;
     private double maxInteractDistanceSq;
     private boolean requireVehicle;
@@ -69,7 +71,7 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
     public void onPlayerMove(PlayerMoveEvent event) {
         Location to = event.getTo();
         if (to != null) {
-            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new CachedLocation()).update(to);
+            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new AtomicReference<>(new CachedLocation(to))).set(new CachedLocation(to));
         }
     }
 
@@ -77,12 +79,17 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
     public void onPlayerTeleport(PlayerTeleportEvent event) {
         Location to = event.getTo();
         if (to != null) {
-            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new CachedLocation()).update(to);
+            safeLocationCache.computeIfAbsent(event.getPlayer().getUniqueId(), k -> new AtomicReference<>(new CachedLocation(to))).set(new CachedLocation(to));
         }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
+        safeLocationCache.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerKick(PlayerKickEvent event) {
         safeLocationCache.remove(event.getPlayer().getUniqueId());
     }
 
@@ -99,78 +106,83 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            boolean isVehicleMove = packetName.contains("Vehicle");
-            if (requireVehicle && isVehicleMove && player.getVehicle() == null) {
-                module.flag(player, "Exploit: VehicleMove without vehicle", 10.0);
-                return false;
-            }
+        boolean isVehicleMove = packetName.contains("Vehicle");
+        if (requireVehicle && isVehicleMove && player.getVehicle() == null) {
+            module.flag(player, "Exploit: VehicleMove without vehicle", 10.0);
+            return false;
+        }
 
-            PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
+        PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
 
-            for (long offset : fMap.doubleOffsets) {
-                double d = UnsafeUtil.getDouble(packet, offset);
-                if (Double.isNaN(d) || Double.isInfinite(d)) {
-                    module.flag(player, "Exploit: Invalid Double Position", 10.0);
+        if (packetName.contains("InteractPacket") || packetName.contains("UseEntity")) {
+            if (fMap.entityIdOffset != -1) {
+                int entityId = UnsafeUtil.getInt(packet, fMap.entityIdOffset);
+                if (entityId < 0 || entityId > 2000000) {
+                    module.flag(player, "Exploit: Invalid Entity ID (" + entityId + ")", 10.0);
                     return false;
                 }
-                if (Math.abs(d) > INSANE_COORD) {
-                    module.flag(player, "Exploit: Insane coordinate (" + d + ")", 10.0);
-                    return false;
-                }
-                if (Math.abs(d) > maxAbsoluteCoord) {
-                    module.flag(player, "Exploit: Beyond world border (" + d + ")", 10.0);
-                    return false;
-                }
-            }
-
-            for (long offset : fMap.floatOffsets) {
-                float fl = UnsafeUtil.getFloat(packet, offset);
-                if (Float.isNaN(fl) || Float.isInfinite(fl)) {
-                    module.flag(player, "Exploit: Invalid Float Rotation", 10.0);
-                    return false;
-                }
-                if (Math.abs(fl) > MAX_ROTATION) {
-                    module.flag(player, "Exploit: Extreme rotation (" + fl + ")", 10.0);
-                    return false;
-                }
-            }
-
-            CachedLocation cachedLoc = safeLocationCache.get(player.getUniqueId());
-
-            for (long offset : fMap.blockPosOffsets) {
-                Object val = UnsafeUtil.getObject(packet, offset);
-                if (val == null) continue;
-
-                long[] bpOffsets = blockPosFieldsMap.computeIfAbsent(val.getClass(), this::mapBlockPosFields);
-
-                int bX = 0, bY = 0, bZ = 0;
-
-                for (int i = 0; i < bpOffsets.length; i++) {
-                    int coord = UnsafeUtil.getInt(val, bpOffsets[i]);
-                    if (Math.abs(coord) > maxAbsoluteCoord) {
-                        module.flag(player, "Exploit: Invalid BlockPos (" + coord + ")", 10.0);
-                        return false;
-                    }
-                    if (i == 0) bX = coord;
-                    else if (i == 1) bY = coord;
-                    else if (i == 2) bZ = coord;
-                }
-
-                if (cachedLoc != null && maxInteractDistanceSq > 0 && bpOffsets.length >= 3) {
-                    double distSq = distanceSquared(cachedLoc.x, cachedLoc.y, cachedLoc.z, bX, bY, bZ);
-                    if (distSq > maxInteractDistanceSq) {
-                        module.flag(player, "Exploit: Out of Range Interaction", 5.0);
-                        return false;
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            if (module.getConfigManager().isDebugMode()) {
-                e.printStackTrace();
             }
         }
+
+        for (long offset : fMap.doubleOffsets) {
+            double d = UnsafeUtil.getDouble(packet, offset);
+            if (Double.isNaN(d) || Double.isInfinite(d)) {
+                module.flag(player, "Exploit: Invalid Double Position", 10.0);
+                return false;
+            }
+            if (Math.abs(d) > INSANE_COORD) {
+                module.flag(player, "Exploit: Insane coordinate (" + d + ")", 10.0);
+                return false;
+            }
+            if (Math.abs(d) > maxAbsoluteCoord) {
+                module.flag(player, "Exploit: Beyond world border (" + d + ")", 10.0);
+                return false;
+            }
+        }
+
+        for (long offset : fMap.floatOffsets) {
+            float fl = UnsafeUtil.getFloat(packet, offset);
+            if (Float.isNaN(fl) || Float.isInfinite(fl)) {
+                module.flag(player, "Exploit: Invalid Float Rotation", 10.0);
+                return false;
+            }
+            if (Math.abs(fl) > MAX_ROTATION) {
+                module.flag(player, "Exploit: Extreme rotation (" + fl + ")", 10.0);
+                return false;
+            }
+        }
+
+        AtomicReference<CachedLocation> cachedRef = safeLocationCache.get(player.getUniqueId());
+        CachedLocation cachedLoc = cachedRef != null ? cachedRef.get() : null;
+
+        for (long offset : fMap.blockPosOffsets) {
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val == null) continue;
+
+            long[] bpOffsets = blockPosFieldsMap.computeIfAbsent(val.getClass(), this::mapBlockPosFields);
+
+            int bX = 0, bY = 0, bZ = 0;
+
+            for (int i = 0; i < bpOffsets.length; i++) {
+                int coord = UnsafeUtil.getInt(val, bpOffsets[i]);
+                if (Math.abs(coord) > maxAbsoluteCoord) {
+                    module.flag(player, "Exploit: Invalid BlockPos (" + coord + ")", 10.0);
+                    return false;
+                }
+                if (i == 0) bX = coord;
+                else if (i == 1) bY = coord;
+                else if (i == 2) bZ = coord;
+            }
+
+            if (cachedLoc != null && maxInteractDistanceSq > 0 && bpOffsets.length >= 3) {
+                double distSq = distanceSquared(cachedLoc.x, cachedLoc.y, cachedLoc.z, bX, bY, bZ);
+                if (distSq > maxInteractDistanceSq) {
+                    module.flag(player, "Exploit: Out of Range Interaction", 5.0);
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -192,12 +204,22 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
             if (offset == -1) continue;
 
             Class<?> type = f.getType();
+            String name = f.getName().toLowerCase();
+            
             if (type == double.class) {
-                dList.add(offset);
+                if (name.length() <= 2 || name.contains("x") || name.contains("y") || name.contains("z")) {
+                    dList.add(offset);
+                }
             } else if (type == float.class) {
-                fList.add(offset);
+                if (name.length() <= 2 || name.contains("yaw") || name.contains("pitch") || name.contains("y") || name.contains("p") || name.contains("e") || name.contains("f")) {
+                    fList.add(offset);
+                }
             } else if (type.getSimpleName().equals("BlockPosition") || type.getSimpleName().equals("BlockPos")) {
                 bList.add(offset);
+            } else if (type == int.class && (name.contains("entity") || name.equals("a"))) {
+                if (map.entityIdOffset == -1) {
+                    map.entityIdOffset = offset;
+                }
             }
         }
 
@@ -222,13 +244,9 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
         return offsets.stream().mapToLong(l -> l).toArray();
     }
 
-    private static class CachedLocation {
-        volatile double x, y, z;
-
-        void update(Location loc) {
-            this.x = loc.getX();
-            this.y = loc.getY();
-            this.z = loc.getZ();
+    private record CachedLocation(double x, double y, double z) {
+        CachedLocation(Location loc) {
+            this(loc.getX(), loc.getY(), loc.getZ());
         }
     }
 
@@ -236,5 +254,6 @@ public class MovementGuardProcessor implements PacketProcessor, Listener {
         long[] doubleOffsets = new long[0];
         long[] floatOffsets = new long[0];
         long[] blockPosOffsets = new long[0];
+        long entityIdOffset = -1;
     }
 }

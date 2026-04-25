@@ -32,6 +32,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class WindowClickProcessor implements PacketProcessor {
 
+    private static final int NO_SLOT_SELECTED = -999;
+    private static final int OUTSIDE_INVENTORY_SLOT = -1;
+    private static final int MAX_HOTBAR_SLOT = 8;
+    private static final int OFFHAND_SLOT = 40;
+    
     private final GuardianModule module;
     private final Map<Class<?>, PacketFieldMap> fieldCache = new ConcurrentHashMap<>();
     private final RateLimiterUtil secondLimiter = new RateLimiterUtil(1000L);
@@ -56,79 +61,79 @@ public class WindowClickProcessor implements PacketProcessor {
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            if (maxClicksPerTick > 0 && tickLimiter.checkExceeded(player.getUniqueId(), maxClicksPerTick)) {
-                module.flag(player, "Exploit: WindowClick burst", 2.5);
+        if (maxClicksPerTick > 0 && tickLimiter.checkExceeded(player.getUniqueId(), maxClicksPerTick)) {
+            module.flag(player, "Exploit: WindowClick burst", 2.5);
+            return false;
+        }
+        if (maxClicksPerSecond > 0 && secondLimiter.checkExceeded(player.getUniqueId(), maxClicksPerSecond)) {
+            module.flag(player, "Exploit: WindowClick flood", 5.0);
+            return false;
+        }
+
+        PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
+
+        Integer windowIdInt = fMap.windowIdOffset != -1 ? UnsafeUtil.getInt(packet, fMap.windowIdOffset) : null;
+        if (windowIdInt != null && (windowIdInt < 0 || windowIdInt > 100)) {
+            module.flag(player, "Exploit: Invalid Window ID (" + windowIdInt + ")", 5.0);
+            return false;
+        }
+
+        Integer slotNumInt = null;
+        if (fMap.slotOffset != -1) {
+            if (fMap.slotIsShort) {
+                slotNumInt = (int) UnsafeUtil.getShort(packet, fMap.slotOffset);
+            } else {
+                slotNumInt = UnsafeUtil.getInt(packet, fMap.slotOffset);
+            }
+        }
+
+        Byte modeByte = fMap.modeByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.modeByteOffset) : null;
+        Byte buttonByte = fMap.buttonByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.buttonByteOffset) : null;
+        Integer buttonInt = fMap.buttonIntOffset != -1 ? UnsafeUtil.getInt(packet, fMap.buttonIntOffset) : null;
+
+        int clickTypeOrdinal = -1;
+        if (fMap.enumOffset != -1) {
+            Enum<?> e = (Enum<?>) UnsafeUtil.getObject(packet, fMap.enumOffset);
+            if (e != null) clickTypeOrdinal = e.ordinal();
+        }
+
+        if (buttonInt != null && (buttonInt < NO_SLOT_SELECTED || buttonInt > 999)) {
+            module.flag(player, "Exploit: Invalid WindowClick int (" + buttonInt + ")", 5.0);
+            return false;
+        }
+
+        if (slotNumInt != null && slotNumInt != NO_SLOT_SELECTED && slotNumInt != OUTSIDE_INVENTORY_SLOT) {
+            if (slotNumInt < NO_SLOT_SELECTED || slotNumInt > 999) {
+                module.flag(player, "Exploit: Invalid WindowClick int (" + slotNumInt + ")", 5.0);
                 return false;
             }
-            if (maxClicksPerSecond > 0 && secondLimiter.checkExceeded(player.getUniqueId(), maxClicksPerSecond)) {
-                module.flag(player, "Exploit: WindowClick flood", 5.0);
+
+            if (slotNumInt < 0 || slotNumInt > maxSlotValue) {
+                module.flag(player, "Exploit: Invalid slot (" + slotNumInt + ")", 5.0);
+                return false;
+            }
+        }
+
+        if (modeByte != null) {
+            int mode = modeByte & 0xFF;
+            if (mode > 6) {
+                module.flag(player, "Exploit: Invalid WindowClick mode (" + mode + ")", 5.0);
                 return false;
             }
 
-            PacketFieldMap fMap = fieldCache.computeIfAbsent(packet.getClass(), this::mapFields);
-
-            Integer slotNumInt = null;
-            if (fMap.slotOffset != -1) {
-                if (fMap.slotIsShort) {
-                    slotNumInt = (int) UnsafeUtil.getShort(packet, fMap.slotOffset);
-                } else {
-                    slotNumInt = UnsafeUtil.getInt(packet, fMap.slotOffset);
+            if (mode == 2 && buttonByte != null) {
+                int btn = buttonByte & 0xFF;
+                if (btn > MAX_HOTBAR_SLOT && btn != OFFHAND_SLOT) {
+                    module.flag(player, "Exploit: Invalid SWAP button (" + btn + ")", 5.0);
+                    return false;
                 }
             }
+        }
 
-            Byte modeByte = fMap.modeByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.modeByteOffset) : null;
-            Byte buttonByte = fMap.buttonByteOffset != -1 ? UnsafeUtil.getByte(packet, fMap.buttonByteOffset) : null;
-            Integer buttonInt = fMap.buttonIntOffset != -1 ? UnsafeUtil.getInt(packet, fMap.buttonIntOffset) : null;
-
-            int clickTypeOrdinal = -1;
-            if (fMap.enumOffset != -1) {
-                Enum<?> e = (Enum<?>) UnsafeUtil.getObject(packet, fMap.enumOffset);
-                if (e != null) clickTypeOrdinal = e.ordinal();
-            }
-
-            if (buttonInt != null && (buttonInt < -999 || buttonInt > 999)) {
-                module.flag(player, "Exploit: Invalid WindowClick int (" + buttonInt + ")", 5.0);
+        if (clickTypeOrdinal == 2 && buttonInt != null) {
+            if (buttonInt < 0 || (buttonInt > MAX_HOTBAR_SLOT && buttonInt != OFFHAND_SLOT)) {
+                module.flag(player, "Exploit: Invalid SWAP button (" + buttonInt + ")", 5.0);
                 return false;
-            }
-
-            if (slotNumInt != null && slotNumInt != -999 && slotNumInt != -1) {
-                if (slotNumInt < -999 || slotNumInt > 999) {
-                    module.flag(player, "Exploit: Invalid WindowClick int (" + slotNumInt + ")", 5.0);
-                    return false;
-                }
-
-                if (slotNumInt < 0 || slotNumInt > maxSlotValue) {
-                    module.flag(player, "Exploit: Invalid slot (" + slotNumInt + ")", 5.0);
-                    return false;
-                }
-            }
-
-            if (modeByte != null) {
-                int mode = modeByte & 0xFF;
-                if (mode > 6) {
-                    module.flag(player, "Exploit: Invalid WindowClick mode (" + mode + ")", 5.0);
-                    return false;
-                }
-
-                if (mode == 2 && buttonByte != null) {
-                    int btn = buttonByte & 0xFF;
-                    if (btn > 8 && btn != 40) {
-                        module.flag(player, "Exploit: Invalid SWAP button (" + btn + ")", 5.0);
-                        return false;
-                    }
-                }
-            }
-
-            if (clickTypeOrdinal == 2 && buttonInt != null) {
-                if (buttonInt < 0 || (buttonInt > 8 && buttonInt != 40)) {
-                    module.flag(player, "Exploit: Invalid SWAP button (" + buttonInt + ")", 5.0);
-                    return false;
-                }
-            }
-        } catch (Exception e) {
-            if (module.getConfigManager().isDebugMode()) {
-                e.printStackTrace();
             }
         }
         return true;
@@ -158,6 +163,10 @@ public class WindowClickProcessor implements PacketProcessor {
                     map.slotOffset = offset;
                 } else if (fieldName.contains("button") || fieldName.equals("d")) {
                     map.buttonIntOffset = offset;
+                } else if (fieldName.contains("window") || fieldName.equals("a")) {
+                    if (map.windowIdOffset == -1) {
+                        map.windowIdOffset = offset;
+                    }
                 }
             } else if (type == short.class) {
                 String fieldName = f.getName().toLowerCase();
@@ -176,6 +185,7 @@ public class WindowClickProcessor implements PacketProcessor {
         long enumOffset = -1;
         long slotOffset = -1;
         long buttonIntOffset = -1;
+        long windowIdOffset = -1;
         boolean slotIsShort = false;
     }
 }

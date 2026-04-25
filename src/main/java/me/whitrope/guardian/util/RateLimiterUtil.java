@@ -45,15 +45,21 @@ public class RateLimiterUtil {
         if (maxTokens <= 0) return false;
 
         long now = System.currentTimeMillis();
-        RateWindow window = windows.asMap().computeIfAbsent(key, k -> new RateWindow(now));
-
-        synchronized (window) {
-            if (now - window.startTime >= windowMillis) {
-                window.startTime = now;
-                window.count.set(0);
-            }
-            return window.count.addAndGet(amount) > maxTokens;
+        RateWindow window;
+        try {
+            window = windows.get(key, () -> new RateWindow(now));
+        } catch (Exception e) {
+            window = new RateWindow(now);
+            windows.put(key, window);
         }
+
+        if (now - window.startTime >= windowMillis) {
+            window.startTime = now;
+            window.count.set(0);
+        }
+        
+        window.count.addAndGet(amount);
+        return window.count.get() > maxTokens;
     }
 
     public void reset(Object key) {

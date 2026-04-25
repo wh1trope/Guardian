@@ -23,8 +23,8 @@ import me.whitrope.guardian.processor.PacketProcessor;
 import me.whitrope.guardian.util.ReflectionUtil;
 import org.bukkit.entity.Player;
 
-import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
+import me.whitrope.guardian.util.UnsafeUtil;
 
 /**
  * Validates pick-item packets to prevent item duplication or crashes.
@@ -39,25 +39,21 @@ public class PickItemProcessor implements PacketProcessor {
 
     @Override
     public boolean process(Object packet, Player player, String packetName, Channel channel) {
-        try {
-            for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
-                MethodHandle mh = ReflectionUtil.getGetter(f);
-                if (mh == null) continue;
-                Object val = mh.invoke(packet);
-                if (val instanceof Integer slot) {
-                    if (slot < 0 || slot > 45) {
-                        module.flag(player, "Exploit: Invalid PickItem slot (" + slot + ")", 5.0);
-                        return false;
-                    }
-                } else if (val instanceof Short slot) {
-                    if (slot < 0 || slot > 45) {
-                        module.flag(player, "Exploit: Invalid PickItem slot (" + slot + ")", 5.0);
-                        return false;
-                    }
+        for (Field f : ReflectionUtil.getCachedFields(packet.getClass())) {
+            long offset = UnsafeUtil.objectFieldOffset(f);
+            if (offset == -1) continue;
+            Object val = UnsafeUtil.getObject(packet, offset);
+            if (val instanceof Integer slot) {
+                if (slot < 0 || slot > 45) {
+                    module.flag(player, "Exploit: Invalid PickItem slot (" + slot + ")", 5.0);
+                    return false;
+                }
+            } else if (val instanceof Short slot) {
+                if (slot < 0 || slot > 45) {
+                    module.flag(player, "Exploit: Invalid PickItem slot (" + slot + ")", 5.0);
+                    return false;
                 }
             }
-        } catch (Throwable e) {
-            if (module.getConfigManager().isDebugMode()) e.printStackTrace();
         }
         return true;
     }
