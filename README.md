@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🛡️ Guardian AntiCrash</h1>
+  <h1>🛡️ Guardian AntiCrash Plugin</h1>
   <p><strong>A high-performance, comprehensive exploit and crash protection plugin for Minecraft 1.20+</strong></p>
   <br>
   
@@ -54,7 +54,7 @@ Defends against botting attacks during the login phase:
 
 ## 📥 Installation
 
-1. Download the latest `Guardian-1.0.jar` from the [Releases](https://github.com/whitrope/Guardian/releases) page.
+1. Download the latest `Guardian.jar` from the [Releases](https://github.com/whitrope/Guardian/releases) page.
 2. Place the `.jar` file into your server's `plugins` folder.
 3. Restart your server.
 4. Modify the `plugins/Guardian/config.yml` to fit your server's needs (default values are optimized for standard survival/factions servers).
