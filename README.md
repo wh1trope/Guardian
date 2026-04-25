@@ -2,6 +2,7 @@
   <h1>🛡️ Guardian AntiCrash</h1>
   <p><strong>A high-performance, comprehensive exploit and crash protection plugin for Minecraft 1.20+</strong></p>
 
+
   [![Java](https://img.shields.io/badge/Java-17%2B-blue?logo=java)](https://adoptium.net/)
   [![Spigot](https://img.shields.io/badge/Spigot-1.20.1%2B-orange?logo=spigot)](https://www.spigotmc.org/)
   [![License](https://img.shields.io/badge/License-GPLv3-green.svg)](https://www.gnu.org/licenses/gpl-3.0)
