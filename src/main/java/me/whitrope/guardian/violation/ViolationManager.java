@@ -43,14 +43,6 @@ public class ViolationManager {
         startDecayTask();
     }
 
-    public ViolationUser peekUser(Player player) {
-        ViolationUser user = activeUsers.get(player.getUniqueId());
-        if (user != null && user.getOwner() == player) {
-            return user;
-        }
-        return null;
-    }
-
     public ViolationUser getUser(Player player) {
         ViolationUser user = activeUsers.get(player.getUniqueId());
         if (user != null && user.getOwner() == player) {
